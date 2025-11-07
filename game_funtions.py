@@ -94,7 +94,7 @@ def update_screen(ai_settings, screen, stats, sb, ship, aliens, bullets, alien_b
 	#Make the most recently drawn screen visible.	
 	pygame.display.flip()
 
-def update_bullets(ai_settings, screen, stats, sb, ship, aliens, bullets):
+def update_bullets(ai_settings, screen, stats, sb, ship, aliens, bullets, alien_bullets):
 	"""Update position of bullets and delete old bullets"""
 
 	#update bullet position
@@ -106,23 +106,24 @@ def update_bullets(ai_settings, screen, stats, sb, ship, aliens, bullets):
 		if bullet.rect.bottom <= 0:
 			bullets.remove(bullet)
 
-	check_bullet_alien_collisions(ai_settings, screen, stats, sb, ship, aliens, bullets)
+	check_bullet_alien_collisions(ai_settings, screen, stats, sb, ship, aliens, bullets, alien_bullets)
 		
 
-def check_bullet_alien_collisions(ai_settings, screen, stats, sb, ship, aliens, bullets):
+def check_bullet_alien_collisions(ai_settings, screen, stats, sb, ship, aliens, bullets, alien_bullets):
 	#Check for any bullets that have hit aliens.
 	#If so, get rid of the bullet and the alien.
 	collisions = pygame.sprite.groupcollide(bullets, aliens, True, True)
 
 	if collisions:
-		for aliens in collisions.values():
-			stats.score += ai_settings.alien_points * len(aliens)
+		for aliens_hit in collisions.values():
+			stats.score += ai_settings.alien_points * len(aliens_hit)
 			sb.prep_score()
 		check_high_scores(stats, sb)
 
 	if len(aliens)== 0:
 		#If entire fleet is destroyed, start a new level.
 		bullets.empty()
+		alien_bullets.empty()  # Clear alien bullets when level advances
 		ai_settings.increase_speed()
 
 		#Increase Level
@@ -261,6 +262,9 @@ def update_alien_bullets(ai_settings, screen, stats, sb, ship, alien_bullets, al
 		if bullet.rect.top >= ai_settings.screen_height:
 			alien_bullets.remove(bullet)
 	
+	# Check for player bullets hitting alien bullets (bullets destroy each other)
+	bullet_collisions = pygame.sprite.groupcollide(bullets, alien_bullets, True, True)
+	
 	# Check for alien bullet hitting ship
 	if pygame.sprite.spritecollideany(ship, alien_bullets):
 		ship_hit(ai_settings, screen, stats, sb, ship, aliens, bullets)
@@ -268,7 +272,28 @@ def update_alien_bullets(ai_settings, screen, stats, sb, ship, alien_bullets, al
 		alien_bullets.empty()
 
 def aliens_shoot(ai_settings, screen, aliens, alien_bullets):
-	"""Randomly select aliens to shoot."""
-	for alien in aliens.sprites():
+	"""Strategically select aliens to shoot - only front row aliens and limit total bullets."""
+	# Don't shoot if we already have max bullets on screen
+	if len(alien_bullets) >= ai_settings.max_alien_bullets:
+		return
+	
+	# Get front-row aliens (bottommost aliens in each column)
+	front_row_aliens = get_front_row_aliens(aliens)
+	
+	# Only allow shooting from front row and with very low probability
+	for alien in front_row_aliens:
 		if random.random() < ai_settings.alien_shooting_frequency:
 			alien_fire_bullet(ai_settings, screen, alien, alien_bullets)
+			break  # Only one alien shoots per frame maximum
+
+def get_front_row_aliens(aliens):
+	"""Get the bottommost alien in each column (front row)."""
+	front_row = {}
+	
+	# Group aliens by x position (column)
+	for alien in aliens.sprites():
+		x_pos = alien.rect.centerx
+		if x_pos not in front_row or alien.rect.bottom > front_row[x_pos].rect.bottom:
+			front_row[x_pos] = alien
+	
+	return list(front_row.values())

@@ -21,7 +21,8 @@ class settings():
 		self.alien_bullet_height = 10
 		self.alien_bullet_color = (255, 0, 0)
 		self.alien_bullet_speed_factor = 2
-		self.alien_shooting_frequency = 0.008  # Probability of alien shooting per frame
+		self.alien_shooting_frequency = 0.001  # Much lower probability per frame
+		self.max_alien_bullets = 3  # Limit total alien bullets on screen
 
 		#Alien settings
 		#self.alien_speed_factor = 1
@@ -51,6 +52,9 @@ class settings():
 
 		#scoring
 		self.alien_points = 50
+		
+		# Reset alien shooting frequency to base level
+		self.alien_shooting_frequency = 0.001
 
 	def increase_speed(self):
 		"""Increase speed settings."""
@@ -59,4 +63,7 @@ class settings():
 		self.alien_speed_factor *= self.speedup_scale
 
 		self.alien_points = int(self.alien_points * self.score_scale)
+		
+		# Slightly increase alien shooting frequency each level (but keep it reasonable)
+		self.alien_shooting_frequency = min(self.alien_shooting_frequency * 1.2, 0.005)
 		
