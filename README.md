@@ -1,57 +1,78 @@
-# Alien Invasion Game
+# 👾 Alien Invasion
 
-A classic 2D space shooter game built with Python and Pygame.
+A simple 2D space shooter I built in Python with Pygame.
 
-## Description
+## How this project started
 
-Alien Invasion is a side-scrolling space shooter where the player controls a ship to defend against waves of descending aliens. The game features progressive difficulty, scoring system, and multiple lives.
+I wrote this game back in my 2nd year of engineering, when I was just learning Python. I followed along with the Alien Invasion project from *Python Crash Course* by Eric Matthes. It was one of the first "real" programs I made: a window, a ship, aliens, and a lot of trial and error.
 
-## Features
+The code is a bit rough in places (yes, the file is called `game_funtions.py` 😅). I kept it that way on purpose so you can see where I started.
 
-- **Player Controls**: Move ship left/right with arrow keys, shoot with spacebar
-- **Enemy Waves**: Aliens move in formation and drop down when hitting screen edges
-- **Scoring System**: Points for destroying aliens, with high score tracking
-- **Progressive Difficulty**: Game speed increases with each level
-- **Lives System**: Player has 3 ships/lives per game
-- **Alien Shooting**: Aliens fire back at the player (recently added)
+## What I'm doing with it now
 
-## Recent Enhancements
+These days this is my **weekend hobby project**. I'm using AI coding agents to help me improve the game step by step. I want to see how far an old beginner project can go, and learn how to work well with AI tools along the way.
 
-- ✅ **Alien Shooting Mechanics**: Aliens now shoot projectiles that the player must avoid
-- 🔄 **In Progress**: Additional alien types and power-ups
-- 📋 **Planned**: Boss aliens, enhanced difficulty scaling, sound effects
+Every change goes in as its own commit, so the git history shows how the game grows over time.
 
-## Installation
+## How to play
 
-1. Make sure you have Python installed
-2. Install Pygame: `pip install pygame`
-3. Clone or download this repository
-4. Run the game: `python alien_invasion.py`
+Aliens move across the screen in a group and drop down a bit each time they hit the edge. Shoot them all before they reach you!
 
-## Controls
+- You get **3 ships** (lives).
+- Clear all the aliens and a new, faster wave shows up.
+- Aliens in the front row shoot back, so watch out for their red bullets.
+- Your bullets can hit their bullets and cancel them out.
+- Each level gives more points per alien.
 
-- **Arrow Keys**: Move ship left and right
-- **Spacebar**: Fire bullets
-- **Q**: Quit game
-- **Mouse**: Click "Play" button to start/restart
+### Controls
 
-## Game Files
+| Key | What it does |
+| --- | --- |
+| ⬅️ / ➡️ Arrow keys | Move the ship |
+| Spacebar | Shoot |
+| Mouse click on **Play** | Start a new game |
+| Q | Quit |
 
-- `alien_invasion.py` - Main game loop and initialization
-- `settings.py` - Game configuration and settings
-- `ship.py` - Player ship class
-- `alien.py` - Enemy alien class
-- `bullet.py` - Player bullet class
-- `alien_bullet.py` - Alien bullet class
-- `game_funtions.py` - Core game logic and functions
-- `game_stats.py` - Game statistics tracking
-- `scoreboard.py` - Score display and UI
-- `button.py` - Menu button implementation
+## How to run it
 
-## Development
+You need Python 3 and Pygame.
 
-This project uses Git for version control. See commit history for development progress and feature additions.
+```bash
+pip install pygame
+python alien_invasion.py
+```
+
+## What's in the folder
+
+| File | What it does |
+| --- | --- |
+| `alien_invasion.py` | Starts the game and runs the main loop |
+| `game_funtions.py` | Most of the game logic (input, movement, collisions) |
+| `settings.py` | All the numbers you can tweak: speeds, sizes, colors |
+| `ship.py` | The player's ship |
+| `alien.py` | One alien |
+| `bullet.py` | The player's bullets |
+| `alien_bullet.py` | The aliens' bullets |
+| `game_stats.py` | Keeps track of score, level and lives |
+| `scoreboard.py` | Draws the score, high score, level and lives |
+| `button.py` | The Play button |
+| `images/` | Pictures for the ship and the aliens |
+
+## Changes so far
+
+- ✅ The original game from my college days
+- ✅ Aliens shoot back (front row only, with a limit on bullets so it stays fair)
+
+## Ideas for what's next
+
+Some things I'd like to try:
+
+- Sound effects and music
+- Saving the high score between games
+- Different kinds of aliens and boss fights
+- Power-ups
+- Cleaning up the code as I go
 
 ## License
 
-This project is for educational purposes.
+This is a personal learning project. Feel free to look around and learn from it.
