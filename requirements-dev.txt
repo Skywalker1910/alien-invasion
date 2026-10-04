@@ -1,0 +1,3 @@
+-r requirements.txt
+pygbag==0.9.3
+pytest>=8
