@@ -1,15 +1,15 @@
-"""Game objects and their own movement rules.
+"""Game objects. They hold state and simple motion; the rules that tie
+them together live in game.py, and enemy behavior lives in ai.py.
 
-Entities keep exact float positions (x, y is the center) and build a
-pygame.Rect on demand for collisions. They never draw themselves and never
-touch the display, so the whole simulation runs headless in tests.
+Positions are floats (x, y is the center). A pygame.Rect is built on demand
+for collisions. Nothing here draws, so the simulation runs headless.
 """
 import math
 
 import pygame
 
 
-class Entity:
+class Body:
     def __init__(self, x, y, size):
         self.x = float(x)
         self.y = float(y)
@@ -18,181 +18,278 @@ class Entity:
 
     @property
     def rect(self):
-        r = pygame.Rect(0, 0, self.w, self.h)
-        r.center = (round(self.x), round(self.y))
-        return r
+        return pygame.Rect(round(self.x - self.w / 2), round(self.y - self.h / 2), self.w, self.h)
 
 
-class Ship(Entity):
-    """The player's ship. Lives and power-ups are tracked by the game."""
+class Ship(Body):
+    """The player's ship and everything it carries."""
 
     def __init__(self, cfg):
         self.cfg = cfg
-        width, height = cfg.display.width, cfg.display.height
-        size = cfg.player.size
-        super().__init__(width / 2, height - cfg.player.bottom_margin - size[1] / 2, size)
+        pc = cfg.player
+        super().__init__(cfg.display.width / 2, self.home_y(cfg), pc.size)
+        self.hull = pc.max_hull
+        self.armor = 0.0
+        self.shield = 0                 # hits the shield can still block
         self.fire_timer = 0.0
+        self.wing_timer = 0.0
         self.respawn_timer = 0.0
         self.invulnerable_timer = 0.0
+        self.hurt_timer = 0.0
+        self.weapon = None              # name of a collected weapon, None = blaster
+        self.ammo = 0                   # shots left (ammo weapons)
+        self.weapon_time = 0.0          # seconds left (timed weapons)
+        self.buffs = {}                 # wingmen / overdrive / magnet -> seconds left
+        self.laser_on = False
+        self.laser_top = 0.0            # where the beam currently stops
+        self.tilt = 0.0                 # -1..1, for the renderer
+
+    @staticmethod
+    def home_y(cfg):
+        return cfg.display.height - cfg.player.bottom_margin - cfg.player.size[1] / 2
 
     @property
     def hitbox(self):
         r = self.rect
-        scale = self.cfg.player.hitbox_scale
-        return r.inflate(-round(r.w * (1 - scale)), -round(r.h * (1 - scale)))
+        k = 1 - self.cfg.player.hitbox_scale
+        return r.inflate(-round(r.w * k), -round(r.h * k))
 
     @property
     def vulnerable(self):
-        return self.alive and self.invulnerable_timer <= 0
+        return self.alive and self.invulnerable_timer <= 0 and self.hurt_timer <= 0
 
-    def move(self, direction, dt):
-        self.x += direction * self.cfg.player.speed * dt
-        half = self.w / 2
-        self.x = max(half, min(self.cfg.display.width - half, self.x))
+    def move(self, dx, dy, dt):
+        pc = self.cfg.player
+        width, height = self.cfg.display.width, self.cfg.display.height
+        if dx and dy:
+            dx, dy = dx * 0.7071, dy * 0.7071
+        self.x += dx * pc.speed * dt
+        self.y += dy * pc.speed * dt
+        self.x = max(self.w / 2, min(width - self.w / 2, self.x))
+        self.y = max(height * pc.top_zone, min(self.home_y(self.cfg), self.y))
+        self.tilt += (dx - self.tilt) * min(1.0, dt * 12)
 
-    def center(self):
-        self.x = self.cfg.display.width / 2
+    def reset_loadout(self):
+        self.weapon = None
+        self.ammo = 0
+        self.weapon_time = 0.0
+        self.buffs.clear()
+        self.shield = 0
+        self.armor = 0.0
+        self.laser_on = False
 
 
-class Bullet(Entity):
-    def __init__(self, x, y, vx, vy, size, pierce=0):
+class Shot(Body):
+    """A player projectile."""
+
+    def __init__(self, kind, x, y, vx, vy, size, damage, pierce=0):
         super().__init__(x, y, size)
+        self.kind = kind                # bullet, rail, homing, plasma, flak, shrapnel
         self.vx = vx
         self.vy = vy
-        self.pierce_left = pierce      # extra enemies it may pass through
-        self.hit_ids = set()           # enemies already damaged by this bullet
+        self.damage = damage
+        self.pierce = pierce
+        self.hit_ids = set()
+        self.life = 2.5
+        self.splash_radius = 0.0
+        self.splash_damage = 0.0
+        self.turn_rate = 0.0
+        self.fuse = 0.0
+        self.shrapnel = 0
 
     def update(self, dt):
         self.x += self.vx * dt
         self.y += self.vy * dt
+        self.life -= dt
 
-    def off_screen(self, width, height):
-        r = self.rect
-        return r.bottom < 0 or r.top > height or r.right < 0 or r.left > width
+    def steer(self, tx, ty, dt):
+        """Turn toward a target at a limited rate (homing missiles)."""
+        speed = math.hypot(self.vx, self.vy)
+        current = math.atan2(self.vy, self.vx)
+        wanted = math.atan2(ty - self.y, tx - self.x)
+        diff = (wanted - current + math.pi) % math.tau - math.pi
+        turn = max(-self.turn_rate * dt, min(self.turn_rate * dt, diff))
+        angle = current + turn
+        self.vx, self.vy = math.cos(angle) * speed, math.sin(angle) * speed
+
+    def off_screen(self, width, height, margin=40):
+        return (self.y < -margin or self.y > height + margin
+                or self.x < -margin or self.x > width + margin)
 
 
-class Enemy(Entity):
-    """A formation alien. kind is 'standard', 'armored' or 'agile'.
+class EnemyShot(Shot):
+    """An enemy projectile: bullet, missile (homing, can be shot down) or orb."""
 
-    mode:
-      formation  - marching with the fleet in its slot
-      telegraph  - agile only: shaking in its slot, about to dive
-      diving     - agile only: swaying dive toward where the ship was
-      returning  - agile only: flying back into its slot from the top
-    """
+    def __init__(self, kind, x, y, vx, vy, size, damage):
+        super().__init__(kind, x, y, vx, vy, size, damage)
+        self.hp = 1.0 if kind == "missile" else 0.0
+        self.life = 6.0
 
-    def __init__(self, uid, kind, etype, slot):
-        super().__init__(0, 0, etype.size)
+
+class Enemy(Body):
+    def __init__(self, uid, kind, spec, hp):
+        super().__init__(0, 0, spec.size)
         self.uid = uid
         self.kind = kind
-        self.hp = etype.hp
-        self.max_hp = etype.hp
-        self.points = etype.points
-        self.slot = slot                # (dx, dy) offset from the fleet origin
-        self.mode = "formation"
-        self.mode_timer = 0.0
-        self.flash_timer = 0.0          # white flash after being hit
-        self.charge_timer = 0.0         # > 0 while winding up a shot
-        self.pending_shot = None        # angle of the shot being charged
-        self.dive_x0 = 0.0
-        self.dive_target_x = 0.0
-        self.dive_t = 0.0
+        self.spec = spec
+        self.hp = hp
+        self.max_hp = hp
+        self.points = spec.points
+        self.state = "enter"
+        self.t = 0.0                    # time in the current state
+        self.age = 0.0
+        self.phase = 0.0                # per-enemy offset for bobbing
+        self.anchor = None
+        self.start = None
+        self.ctrl = None
+        self.end = None
+        self.duration = 1.0
+        self.amp = 0.0
+        self.freq = 0.0
+        self.vx = 0.0
+        self.vy = 0.0
+        self.fire_timer = 0.0
+        self.charge_timer = 0.0         # glowing before a shot
+        self.action_timer = 0.0         # next dive / reposition
+        self.beam_x = 0.0
+        self.beam_hit = False
+        self.flash = 0.0
+        self.spin = 0.0                 # asteroids
+        self.armed = -1.0               # mines: < 0 idle, >= 0 counting down
+        self.escaped = False
+        self.minion = False             # launched by a boss hangar
 
-    def slot_position(self, origin):
-        return origin[0] + self.slot[0], origin[1] + self.slot[1]
+    @property
+    def beaming(self):
+        return self.state == "beam"
 
-    def hit(self, damage, flash):
-        self.hp -= damage
-        self.flash_timer = flash
-        if self.hp <= 0:
-            self.alive = False
-        return not self.alive
+    @property
+    def charging_beam(self):
+        return self.state == "beam_charge"
 
-    def start_dive(self, ship_x):
-        self.mode = "diving"
-        self.dive_x0 = self.x
-        self.dive_target_x = ship_x
-        self.dive_t = 0.0
+
+def bezier(p0, p1, p2, p3, t):
+    u = 1 - t
+    a, b, c, d = u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t
+    return (a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+            a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1])
+
+
+def path_length(p0, p1, p2, p3, steps=12):
+    total, prev = 0.0, p0
+    for i in range(1, steps + 1):
+        cur = bezier(p0, p1, p2, p3, i / steps)
+        total += math.hypot(cur[0] - prev[0], cur[1] - prev[1])
+        prev = cur
+    return total
+
+
+class Hardpoint:
+    """A weapon (or the core) mounted on a boss. Only hardpoints of the
+    boss's current stage can be damaged; everything else is armored."""
+
+    def __init__(self, uid, spec, hp, size):
+        self.uid = uid
+        self.kind = spec.kind
+        self.spec = spec
+        self.offset = spec.offset
+        self.stage = spec.stage
+        self.hp = hp
+        self.max_hp = hp
+        self.w, self.h = size
+        self.alive = True
+        self.fire_timer = spec.interval * 0.6
         self.charge_timer = 0.0
-        self.pending_shot = None
-
-    def update_dive(self, dt, speed, sway, sway_hz):
-        self.dive_t += dt
-        self.y += speed * dt
-        # Drift from the launch column toward where the ship was, swaying
-        # side to side so the path is readable but not a straight line.
-        drift = min(1.0, self.dive_t / 1.6)
-        base_x = self.dive_x0 + (self.dive_target_x - self.dive_x0) * drift
-        self.x = base_x + sway * math.sin(self.dive_t * sway_hz * 2 * math.pi)
-
-    def update_return(self, dt, target, speed):
-        dx, dy = target[0] - self.x, target[1] - self.y
-        dist = math.hypot(dx, dy)
-        step = speed * dt
-        if dist <= step:
-            self.x, self.y = target
-            self.mode = "formation"
-        else:
-            self.x += dx / dist * step
-            self.y += dy / dist * step
-
-
-class Boss(Entity):
-    def __init__(self, cfg, index):
-        bc = cfg.boss
-        super().__init__(cfg.display.width / 2, -bc.size[1], bc.size)
-        self.uid = -index
-        self.kind = "boss"
-        self.index = index
-        self.max_hp = bc.hp + bc.hp_per_boss * (index - 1)
-        self.hp = self.max_hp
-        self.points = bc.points + bc.points_per_boss * (index - 1)
-        self.target_y = bc.y
-        self.direction = 1
-        self.flash_timer = 0.0
-        self.pattern_timer = bc.pattern_cooldown
-        self.pattern_index = 0
-        self.charge_timer = 0.0         # telegraph before a pattern
-        self.pending_pattern = None
         self.burst_left = 0
         self.burst_timer = 0.0
-        self.second_fan_timer = 0.0
+        self.beam_state = None          # None, "charge", "beam"
+        self.beam_timer = 0.0
+        self.beam_hit = False
+        self.flash = 0.0
+        self.ring_turn = 0              # alternates core patterns
+        self.x = 0.0
+        self.y = 0.0
+
+    @property
+    def rect(self):
+        return pygame.Rect(round(self.x - self.w / 2), round(self.y - self.h / 2), self.w, self.h)
+
+
+PART_SIZES = {"cannon": (40, 36), "spread": (44, 36), "missile": (40, 36), "laser": (36, 44),
+              "hangar": (70, 34), "core": (64, 56)}
+
+
+class Boss(Body):
+    def __init__(self, cfg, index, cycle, uid_start):
+        spec = cfg.bosses[index]
+        super().__init__(cfg.display.width / 2, -spec.size[1] / 2, spec.size)
+        self.spec = spec
+        self.index = index
+        self.cycle = cycle
+        self.label = spec.label
+        self.points = int(spec.points * (1 + cycle))
+        self.target_y = cfg.display.hud_height + spec.size[1] / 2
+        self.direction = 1
+        self.stage = 1
+        self.stage_timer = 0.0          # breather between stages (no damage, no fire)
+        scale = 1 + cfg.boss.endless_hp_per_cycle * cycle
+        self.parts = [Hardpoint(uid_start + i, hp_spec, hp_spec.hp * scale, PART_SIZES[hp_spec.kind])
+                      for i, hp_spec in enumerate(spec.hardpoints)]
+        self.stages = max(p.stage for p in self.parts)
+        self.place_parts()
 
     @property
     def entering(self):
         return self.y < self.target_y
 
-    def in_phase2(self, threshold):
-        return self.hp <= self.max_hp * threshold
+    def place_parts(self):
+        for part in self.parts:
+            part.x = self.x + part.offset[0]
+            part.y = self.y + part.offset[1]
 
-    def hit(self, damage, flash):
-        self.hp -= damage
-        self.flash_timer = flash
-        if self.hp <= 0:
-            self.hp = 0
-            self.alive = False
-        return not self.alive
+    def active_parts(self):
+        return [p for p in self.parts if p.alive and p.stage == self.stage]
 
-    def move(self, dt, speed, width, margin):
+    def stage_hp(self):
+        parts = [p for p in self.parts if p.stage == self.stage]
+        return sum(max(0.0, p.hp) for p in parts), sum(p.max_hp for p in parts)
+
+    def move(self, dt, enter_speed, width):
         if self.entering:
-            self.y = min(self.target_y, self.y + 120 * dt)
-            return
-        self.x += self.direction * speed * dt
-        half = self.w / 2
-        if self.x + half >= width - margin:
-            self.x = width - margin - half
-            self.direction = -1
-        elif self.x - half <= margin:
-            self.x = margin + half
-            self.direction = 1
+            self.y = min(self.target_y, self.y + enter_speed * dt)
+        else:
+            self.x += self.direction * self.spec.speed * dt
+            # Drift sideways, but keep every weapon on screen and reachable.
+            extent = max(abs(p.offset[0]) + p.w / 2 for p in self.parts)
+            reach = max(20.0, width / 2 - 30 - extent)
+            center = width / 2
+            if self.x > center + reach:
+                self.x, self.direction = center + reach, -1
+            elif self.x < center - reach:
+                self.x, self.direction = center - reach, 1
+        self.place_parts()
 
 
-class PowerUp(Entity):
-    def __init__(self, kind, x, y, size):
-        super().__init__(x, y, size)
+class Pickup(Body):
+    def __init__(self, kind, category, x, y, phase):
+        super().__init__(x, y, (30, 30))
         self.kind = kind
+        self.category = category        # "weapon" or "utility"
         self.age = 0.0
+        self.phase = phase
+        self.base_x = float(x)
 
-    def update(self, dt, fall_speed):
-        self.age += dt
-        self.y += fall_speed * dt
+
+class Shockwave:
+    def __init__(self, x, y, max_radius, speed):
+        self.x, self.y = x, y
+        self.radius = 0.0
+        self.max_radius = max_radius
+        self.speed = speed
+        self.hit = set()
+        self.alive = True
+
+    def update(self, dt):
+        self.radius += self.speed * dt
+        if self.radius >= self.max_radius:
+            self.alive = False

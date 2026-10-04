@@ -101,7 +101,8 @@ class App:
             elif kind == "resume":
                 game.set_paused(False)
             elif kind == "input":
-                self.controls.set_virtual(**{k: cmd[k] for k in ("left", "right", "fire") if k in cmd})
+                self.controls.set_virtual(**{k: cmd[k] for k in ("left", "right", "up", "down", "fire")
+                                               if k in cmd})
             elif kind == "special":
                 self.controls.press_special()
             elif kind == "start" and game.state in (TITLE, GAME_OVER):

@@ -69,16 +69,17 @@ ways:
 | --- | --- | --- |
 | `ready` | the game loaded and is showing the title screen | `version`, `width`, `height` |
 | `run_started` | a new run began | `run_id`, `seed`, `version` |
-| `state` | score, wave, lives, specials, power-ups, pause or state changed (score-only changes at most every 0.25 s) | `state` (`title` / `playing` / `game_over`), `paused`, `score`, `wave`, `lives`, `specials`, `shield`, `powerups` (`{kind: seconds_left}`), `run_id` |
-| `wave_started` | a wave or boss wave begins | `wave`, `boss`, `formation`, `hint` |
-| `wave_cleared` | every enemy in the wave is gone | `wave`, `bonus` |
-| `boss_spawned` / `boss_defeated` | boss fight starts / ends | `index`, `hp` / `points` |
-| `player_hit` | the player lost a life | `lives`, `cause` (`bullet`, `ram`, `invasion`) |
-| `pickup` | a power-up was collected | `kind`, `bonus` |
+| `state` | something on the HUD changed. Lives, level, wave, pause and game state go out at once; score, hull, ammo and timers at most every 0.25 s | `state` (`title` / `playing` / `game_over`), `paused`, `score`, `multiplier`, `level`, `wave`, `lives`, `hull`, `armor`, `shield` (hits left), `weapon` (`{name, ammo, time}` or `null`), `buffs` (`{kind: seconds_left}`), `shock` (0–1 charge), `boss` (`{name, stage, stages, stage_hp}` or `null`), `run_id` |
+| `level_started` | a level (or boss level) begins | `level`, `name`, `boss`, `hint`, `theme` |
+| `wave_started` | a new wave of a normal level begins | `level`, `wave`, `waves` |
+| `level_cleared` | the level is done (all waves or the boss) | `level`, `bonus` |
+| `boss_spawned` / `boss_stage` / `boss_defeated` | boss fight starts / reaches stage 2 or 3 / ends | `name`, `stages` / `stage`, `stages` / `points`, `level` |
+| `player_destroyed` | the player lost a ship | `lives`, `cause` (`bullet`, `orb`, `bolt`, `missile`, `beam`, `ram`, `mine`) |
+| `pickup` | a capsule was collected | `kind`, `category` (`weapon` / `utility`), `label`, `bonus` |
 | `paused` / `resumed` | pause state changed (keyboard, focus or host) | |
-| `game_over` | the run ended. **Sent exactly once per run.** | `run_id`, `seed`, `score`, `wave`, `kills`, `ticks`, `duration`, `version` |
+| `game_over` | the run ended. **Sent exactly once per run.** | `run_id`, `seed`, `score`, `level`, `wave`, `kills`, `ticks`, `duration`, `version` |
 
-`run_id` is `"<seed>-<run number>"`. The simulation runs at a fixed 120 steps
+`run_id` is `"<seed>-<run number>"`. The simulation runs at a fixed 60 steps
 per second and takes all of its randomness from `seed`. That means the same seed
 and the same inputs always produce the same run. `ticks` is the number of
 simulation steps. Together these lay the groundwork for server-side score
@@ -96,8 +97,8 @@ with `window.AlienInvasionBridge.send({type, ...})` from inside the game page.
 | `start` | start a run from the title or game-over screen. Optional integer `seed`. |
 | `restart` | same as pressing R. Only works on the game-over screen. Optional `seed`. |
 | `pause` / `resume` | pause or resume a run in progress (e.g. on `visibilitychange`) |
-| `input` | virtual buttons for touch controls: any of `left`, `right`, `fire` as booleans. Values you leave out keep their previous state. They are combined (OR) with the keyboard. |
-| `special` | fire the special shockwave once (like pressing Shift) |
+| `input` | virtual buttons for touch controls: any of `left`, `right`, `up`, `down`, `fire` as booleans. Values you leave out keep their previous state. They are combined (OR) with the keyboard. |
+| `special` | fire the shockwave if it is charged (like pressing Shift) |
 
 Unknown commands are ignored.
 

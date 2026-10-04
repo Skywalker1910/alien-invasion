@@ -29,17 +29,20 @@
   <div class="game"><iframe id="game" src="game/index.html" allow="autoplay; fullscreen"></iframe></div>
   <div class="hud">
     <span>Score: <b id="score">0</b></span>
-    <span>Wave: <b id="wave">-</b></span>
-    <span>Lives: <b id="lives">-</b></span>
+    <span>Level: <b id="level">-</b></span>
+    <span>Hull: <b id="hull">-</b></span>
+    <span>Ships: <b id="lives">-</b></span>
     <button id="start" disabled>Start</button>
     <button id="pause">Pause</button>
   </div>
   <!-- Optional on-screen controls for touch devices -->
   <div class="pad">
     <button data-btn="left">◀</button>
-    <button data-btn="fire">FIRE</button>
+    <button data-btn="up">▲</button>
+    <button data-btn="down">▼</button>
     <button data-btn="right">▶</button>
-    <button id="special">SPECIAL</button>
+    <button data-btn="fire">FIRE</button>
+    <button id="special">SHOCK</button>
   </div>
 </div>
 <script>
@@ -57,12 +60,13 @@
         break;
       case "state":
         document.getElementById("score").textContent = ev.score;
-        document.getElementById("wave").textContent = ev.wave;
+        document.getElementById("level").textContent = ev.level;
+        document.getElementById("hull").textContent = ev.hull;
         document.getElementById("lives").textContent = ev.lives;
         break;
       case "game_over":
         // The host decides what to do with the result, e.g. ask for a
-        // display name and submit {score, wave, seed, run_id} to its own
+        // display name and submit {score, level, seed, run_id} to its own
         // leaderboard service. The game never does this itself.
         console.log("run finished", ev);
         break;
@@ -79,7 +83,7 @@
     if (document.hidden) { paused = true; send({ type: "pause" }); }
   });
 
-  const held = { left: false, right: false, fire: false };
+  const held = { left: false, right: false, up: false, down: false, fire: false };
   for (const btn of document.querySelectorAll("[data-btn]")) {
     const name = btn.dataset.btn;
     const set = (down) => (e) => { e.preventDefault(); held[name] = down; send({ type: "input", ...held }); };

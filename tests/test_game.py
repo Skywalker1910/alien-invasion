@@ -5,271 +5,434 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+import pytest  # noqa: E402
+
+from invasion import weapons  # noqa: E402
 from invasion.autopilot import autopilot  # noqa: E402
 from invasion.config import Config  # noqa: E402
-from invasion.entities import Bullet, PowerUp  # noqa: E402
+from invasion.entities import EnemyShot, Pickup  # noqa: E402
 from invasion.game import GAME_OVER, PLAYING, TITLE, Game, InputState  # noqa: E402
-from invasion.waves import plan_wave  # noqa: E402
+from invasion.levels import build_wave, level_spec  # noqa: E402
 
 IDLE = InputState()
+FIRE = InputState(fire=True)
 
 
 def new_game(seed=1):
     game = Game(seed=seed)
     game.start_run()
-    hold_fire(game)
+    calm(game)
     return game
 
 
-def hold_fire(game):
-    """Stop the aliens from shooting so tests control every bullet."""
-    game.fire_timer = 1e9
+def calm(game):
+    """Freeze the level director and silence enemies so tests control everything."""
+    game.phase = "test"
+    game.banner_timer = 0.0
+    game.enemies.clear()
+    game.enemy_shots.clear()
+    game.shots_cap = 0
 
 
 def run(game, seconds, inp=IDLE):
     for _ in range(round(seconds * game.cfg.display.sim_hz)):
         game.step(inp)
-        hold_fire(game)
 
 
-def shoot_ship(game, count=1):
+def hit_ship(game, damage=10, count=1):
     for _ in range(count):
-        game.enemy_bullets.append(Bullet(game.ship.x, game.ship.y, 0, 0, (6, 14)))
+        game.enemy_shots.append(EnemyShot("bullet", game.ship.x, game.ship.y, 0, 0, (8, 14), damage))
+    game.step(IDLE)
 
 
 def give(game, kind):
-    game._collect(PowerUp(kind, game.ship.x, game.ship.y, (26, 26)))
+    category = "weapon" if kind in game.cfg.weapons else "utility"
+    game._collect(Pickup(kind, category, game.ship.x, game.ship.y, 0.0))
 
 
-def wait_until_vulnerable(game):
-    pc = game.cfg.player
-    run(game, pc.respawn_delay + pc.invulnerable_time + 0.1)
-    assert game.ship.vulnerable
+def add_enemy(game, kind="guardian", x=None, y=200, hp=None):
+    enemy = game._new_enemy(kind)
+    enemy.x = game.ship.x if x is None else x
+    enemy.y = y
+    enemy.anchor = (enemy.x, enemy.y)
+    enemy.state = "hold"
+    enemy.fire_timer = 1e9
+    enemy.action_timer = 1e9
+    if hp is not None:
+        enemy.hp = enemy.max_hp = hp
+    return enemy
 
 
 def of_type(events, kind):
     return [e for e in events if e["type"] == kind]
 
 
+def wait_iframes(game):
+    run(game, game.cfg.player.hurt_iframes + 0.05)
+
+
 # ----------------------------------------------------------------------
-# Lives and damage
+# Hull, armor, shield, lives
 # ----------------------------------------------------------------------
-def test_three_lives_means_exactly_three_hits():
+def test_damage_goes_to_armor_first_then_hull():
     game = new_game()
-    assert game.lives == 3
-    for expected in (2, 1, 0):
-        wait_until_vulnerable(game)
-        shoot_ship(game)
-        game.step(IDLE)
-        assert game.lives == expected
-    assert game.state == PLAYING          # explosion plays out first
-    run(game, game.cfg.player.game_over_delay + 0.1)
-    assert game.state == GAME_OVER
-    assert game.lives == 0
+    hit_ship(game, 30)
+    assert game.ship.hull == 70
+    give(game, "armor")
+    wait_iframes(game)
+    hit_ship(game, 30)
+    assert (game.ship.armor, game.ship.hull) == (20, 70)
+    wait_iframes(game)
+    hit_ship(game, 30)
+    assert (game.ship.armor, game.ship.hull) == (0, 60)
 
 
-def test_simultaneous_hits_cost_one_life():
+def test_one_burst_cannot_chain_damage():
     game = new_game()
-    shoot_ship(game, count=3)
-    enemy = game.enemies[0]
-    enemy.mode, enemy.x, enemy.y = "diving", game.ship.x, game.ship.y
-    game.step(IDLE)
-    assert game.lives == 2
-    run(game, 0.5)
-    assert game.lives == 2
+    hit_ship(game, 10, count=4)
+    assert game.ship.hull == 90
+    run(game, 0.1)
+    hit_ship(game, 10)
+    assert game.ship.hull == 90              # still inside the i-frames
+    wait_iframes(game)
+    hit_ship(game, 10)
+    assert game.ship.hull == 80
 
 
-def test_respawn_grants_short_invulnerability():
+def test_three_ships_means_three_hull_bars():
     game = new_game()
     pc = game.cfg.player
-    shoot_ship(game)
-    game.step(IDLE)
-    assert not game.ship.alive
-    run(game, pc.respawn_delay + 0.05)
-    assert game.ship.alive
-    assert 0 < game.ship.invulnerable_timer <= pc.invulnerable_time
-    shoot_ship(game)
-    game.step(IDLE)
-    assert game.lives == 2                # blinking ship can't be hit
-    run(game, pc.invulnerable_time)
-    shoot_ship(game)
-    game.step(IDLE)
-    assert game.lives == 1
+    for expected in (2, 1, 0):
+        assert game.ship.alive
+        hit_ship(game, pc.max_hull)
+        assert game.lives == expected
+        assert not game.ship.alive
+        run(game, pc.respawn_delay + pc.invulnerable_time + 0.1)
+    assert game.state == GAME_OVER
 
 
-def test_invasion_costs_a_life_even_with_shield_and_resets_formation():
+def test_shield_blocks_a_number_of_hits():
     game = new_game()
     give(game, "shield")
-    top = game.origin[1]
-    game.banner_timer = 0
-    game.origin[1] = game.ship.y - 60
-    run(game, 0.1)
-    assert game.lives == 2
-    assert game.origin[1] == top
-    assert "shield" not in game.powerups
+    charges = game.cfg.pickups["shield"].value
+    assert game.ship.shield == charges
+    for _ in range(int(charges)):
+        hit_ship(game, 25)                   # blocks even back to back
+    assert game.ship.hull == game.cfg.player.max_hull
+    assert game.ship.shield == 0
+    hit_ship(game, 25)
+    assert game.ship.hull == 75
 
 
-# ----------------------------------------------------------------------
-# Power-ups
-# ----------------------------------------------------------------------
-def test_shield_blocks_damage_then_expires():
+def test_losing_a_ship_resets_loadout_but_keeps_shockwave():
     game = new_game()
-    give(game, "shield")
-    shoot_ship(game, count=2)
-    game.step(IDLE)
-    assert game.lives == 3
-    game.drain_events()
-    run(game, game.cfg.powerups.durations["shield"])
-    assert "shield" not in game.powerups
-    assert of_type(game.drain_events(), "powerup_expired") == [{"type": "powerup_expired", "kind": "shield"}]
-    shoot_ship(game)
-    game.step(IDLE)
-    assert game.lives == 2
-
-
-def test_weapon_powerups_refresh_and_expire():
-    game = new_game()
-    durations = game.cfg.powerups.durations
-    give(game, "spread")
-    run(game, 6)
-    give(game, "spread")                   # refresh to full, never stacks past it
-    assert math.isclose(game.powerups["spread"], durations["spread"])
-    give(game, "pierce")                   # different kinds stack
-
-    game.bullets.clear()
-    game._fire_player()
-    assert len(game.bullets) == 3
-    assert all(b.pierce_left == game.cfg.powerups.pierce_hits for b in game.bullets)
-
-    run(game, durations["spread"] + 0.05)
-    assert game.powerups == {}
-    game.bullets.clear()
-    game.ship.fire_timer = 0
-    game._fire_player()
-    assert len(game.bullets) == 1 and game.bullets[0].pierce_left == 0
-
-
-def test_piercing_bullet_passes_through_enemies():
-    game = new_game()
-    give(game, "pierce")
-    targets = game.enemies[:3]
-    for i, enemy in enumerate(targets):
-        enemy.hp = 1
-        enemy.x, enemy.y = 100, 300 + i * 50
-    bullet = Bullet(100, 300, 0, 0, (4, 200), pierce=3)
-    game.bullets = [bullet]
-    game._collisions()
-    assert all(not e.alive for e in targets)
-    assert bullet.alive and bullet.pierce_left == 0
-
-
-def test_losing_a_life_clears_powerups_but_keeps_specials():
-    game = new_game()
-    for kind in ("shield", "spread", "pierce"):
+    pc = game.cfg.player
+    for kind in ("rail", "wingmen", "overdrive", "armor"):
         give(game, kind)
-    game.powerups.pop("shield")
-    specials = game.specials
-    shoot_ship(game)
-    game.step(IDLE)
+    game.shock_charge = 0.6
+    hit_ship(game, 500)
     assert game.lives == 2
-    assert game.powerups == {}
-    assert game.specials == specials
-
-
-def test_extra_life_is_capped():
-    game = new_game()
-    cap = game.cfg.player.max_lives
-    pickups = cap + 2
-    for _ in range(pickups):
-        give(game, "life")
-    assert game.lives == cap
-    over_cap = pickups - (cap - game.cfg.player.start_lives)
-    assert game.score == over_cap * game.cfg.powerups.life_cap_bonus
-    for _ in range(300):                   # never dropped while at the cap
-        game._maybe_drop(100, 100, 1.0, guaranteed=True)
-    assert "life" not in {p.kind for p in game.pickups}
+    ship = game.ship
+    assert ship.weapon is None and ship.buffs == {} and ship.armor == 0 and ship.shield == 0
+    run(game, pc.respawn_delay + 0.05)
+    assert ship.alive and ship.hull == pc.max_hull
+    assert 0 < ship.invulnerable_timer <= pc.invulnerable_time
+    hit_ship(game, 50)
+    assert ship.hull == pc.max_hull          # blinking ship can't be hurt
+    assert game.shock_charge > 0.6
 
 
 # ----------------------------------------------------------------------
-# Flow
+# Weapons
 # ----------------------------------------------------------------------
-def clear_wave(game):
-    for enemy in list(game.enemies):
-        game._damage_enemy(enemy, enemy.hp)
-    game.enemies = []
-    if game.boss:
-        game._damage_boss(game.boss.hp)
-
-
-def test_wave_progression_and_boss_every_fifth_wave():
+@pytest.mark.parametrize("kind", list(Config().weapons))
+def test_every_weapon_damages_a_target_above(kind):
     game = new_game()
-    for wave in range(1, 7):
-        assert game.wave == wave
-        assert (game.boss is not None) == (wave == 5)
-        clear_wave(game)
-        game.step(IDLE)
-        assert game.clear_timer > 0
-        events = game.drain_events()
-        assert of_type(events, "wave_cleared")[0]["wave"] == wave
-        run(game, game.cfg.flow.wave_clear_delay + 0.05)
-    specials_after_boss = min(game.cfg.player.special_max,
-                              game.cfg.player.special_start + game.cfg.player.special_per_boss)
-    assert game.specials == specials_after_boss
+    target = add_enemy(game, "guardian", y=250, hp=500)
+    give(game, kind)
+    run(game, 1.0, FIRE)
+    assert target.hp < 500, kind
 
 
-def test_game_over_is_emitted_once_per_run():
-    game = new_game(seed=5)
+def test_ammo_weapons_count_shots_refill_and_run_out():
+    game = new_game()
+    give(game, "rail")
+    full = game.cfg.weapons["rail"].ammo
+    weapons.fire(game)
+    weapons.fire(game)
+    assert game.ship.ammo == full - 2
+    give(game, "rail")
+    assert game.ship.ammo == full            # same weapon refills
     game.drain_events()
-    for _ in range(3):
-        wait_until_vulnerable(game)
-        shoot_ship(game)
+    for _ in range(full):
+        weapons.fire(game)
+    assert game.ship.weapon is None
+    assert of_type(game.drain_events(), "weapon_empty")
+
+
+def test_new_weapon_replaces_the_old_one():
+    game = new_game()
+    give(game, "rapid")
+    give(game, "plasma")
+    assert game.ship.weapon == "plasma"
+    assert game.ship.ammo == game.cfg.weapons["plasma"].ammo
+
+
+def test_timed_weapon_expires():
+    game = new_game()
+    give(game, "spread")
+    run(game, game.cfg.weapons["spread"].duration + 0.05)
+    assert game.ship.weapon is None
+
+
+def test_laser_only_drains_while_firing():
+    game = new_game()
+    give(game, "laser")
+    full = game.ship.weapon_time
+    run(game, 2.0)
+    assert game.ship.weapon_time == full
+    run(game, 2.0, FIRE)
+    assert game.ship.weapon_time == pytest.approx(full - 2.0, abs=0.05)
+
+
+# ----------------------------------------------------------------------
+# Pickups and buffs
+# ----------------------------------------------------------------------
+def test_buffs_refresh_and_expire():
+    game = new_game()
+    give(game, "wingmen")
+    run(game, 10)
+    give(game, "wingmen")
+    assert game.ship.buffs["wingmen"] == game.cfg.pickups["wingmen"].duration
+    game.drain_events()
+    run(game, game.cfg.pickups["wingmen"].duration + 0.05)
+    assert "wingmen" not in game.ship.buffs
+    assert of_type(game.drain_events(), "buff_expired")
+
+
+def test_overdrive_doubles_damage():
+    game = new_game()
+    a = add_enemy(game, x=200, hp=100)
+    game.ship.x = 200
+    weapons.fire(game)
+    run(game, 0.5)
+    normal = 100 - a.hp
+    b = add_enemy(game, x=700, hp=100)
+    game.ship.x = 700
+    give(game, "overdrive")
+    game.ship.fire_timer = 0
+    weapons.fire(game)
+    run(game, 0.5)
+    assert 100 - b.hp == 2 * normal
+
+
+def test_pickups_fall_and_can_be_missed():
+    game = new_game()
+    game.ship.x = 900
+    game._drop_pickup(100, 300)
+    game.drain_events()
+    run(game, 3)
+    assert game.pickups == []
+    assert of_type(game.drain_events(), "pickup_missed")
+
+
+def test_magnet_pulls_pickups_in():
+    game = new_game()
+    give(game, "magnet")
+    game._drop_pickup(game.ship.x + 200, game.ship.y - 220)
+    kind = game.pickups[0].kind
+    game.drain_events()
+    run(game, 1.5)
+    assert any(e["kind"] == kind for e in of_type(game.drain_events(), "pickup"))
+
+
+def test_pity_timer_guarantees_a_drop():
+    game = new_game()
+    drone = add_enemy(game, "drone", hp=1)
+    game.pity_timer = game.cfg.drops.pity_time + 1
+    game._damage_enemy(drone, 1)
+    assert len(game.pickups) == 1
+
+
+def test_utility_caps():
+    game = new_game()
+    pc = game.cfg.player
+    hit_ship(game, 50)
+    give(game, "repair")
+    assert game.ship.hull == 85
+    for _ in range(5):
+        give(game, "repair")
+        give(game, "armor")
+        give(game, "shield")
+        give(game, "life")
+    assert game.ship.hull == pc.max_hull
+    assert game.ship.armor == pc.max_armor
+    assert game.ship.shield == pc.max_shield
+    assert game.lives == pc.max_lives
+    game.pickups.clear()
+    for _ in range(200):
+        game._drop_pickup(100, 100)
+    assert not {"life", "shield"} & {p.kind for p in game.pickups}
+
+
+# ----------------------------------------------------------------------
+# Shockwave and combo
+# ----------------------------------------------------------------------
+def test_shockwave_kills_heavy_ships_then_recharges():
+    game = new_game()
+    guardian = add_enemy(game, "guardian", y=game.ship.y - 200)
+    game.step(InputState(special=True))
+    assert game.shock_charge == 0
+    run(game, 0.5)
+    assert not guardian.alive
+    game.step(InputState(special=True))
+    assert len(game.shockwaves) == 0         # not recharged yet
+    game.drain_events()
+    run(game, game.cfg.player.shock_recharge)
+    assert game.shock_charge == 1.0
+    assert of_type(game.drain_events(), "shock_ready")
+
+
+def test_combo_multiplier_builds_and_resets_on_damage():
+    game = new_game()
+    for i in range(game.cfg.player.combo_step * 2):
+        game._damage_enemy(add_enemy(game, "drone", x=50 + i * 30, hp=1), 1)
+    assert game.multiplier == 3
+    hit_ship(game, 5)
+    assert game.multiplier == 1
+
+
+# ----------------------------------------------------------------------
+# Bosses
+# ----------------------------------------------------------------------
+def boss_game(level=3):
+    game = new_game()
+    game._start_level(level)
+    calm(game)
+    game.boss.y = game.boss.target_y
+    game.boss.place_parts()
+    return game
+
+
+def shoot_at(game, x, y_from=None):
+    shot = weapons.Shot("bullet", x, y_from or game.boss.rect.bottom + 30, 0, -900, (4, 18), 1.0)
+    game.shots.append(shot)
+    for _ in range(10):
         game.step(IDLE)
+        if not shot.alive:
+            break
+    return shot
+
+
+def test_boss_hull_deflects_and_only_active_weapons_take_damage():
+    game = boss_game()
+    boss = game.boss
+    boss.spec.speed = 0
+    stage1 = [p for p in boss.parts if p.stage == 1]
+    stage2 = [p for p in boss.parts if p.stage == 2]
+    gap_x = boss.x + 110                      # between the outer cannons and inner turrets
+    game.drain_events()
+    shoot_at(game, gap_x)
+    assert of_type(game.drain_events(), "deflect")
+    hp = stage2[0].hp
+    shoot_at(game, stage2[0].x)
+    assert stage2[0].hp == hp                # armored until stage 2
+    hp = stage1[0].hp
+    shoot_at(game, stage1[0].x)
+    assert stage1[0].hp < hp
+
+
+@pytest.mark.parametrize("level", [3, 6, 10])
+def test_bosses_fight_in_three_stages_then_the_level_moves_on(level):
+    game = boss_game(level)
+    boss = game.boss
+    game.drain_events()
+    stages = []
+    while game.boss:
+        for part in boss.active_parts():
+            game._damage_part(part, part.hp)
+        stages.append(boss.stage)
+        boss.stage_timer = 0
+    events = game.drain_events()
+    assert [e["stage"] for e in of_type(events, "boss_stage")] == [2, 3]
+    assert of_type(events, "boss_defeated")
+    assert of_type(events, "level_cleared")
+    assert len(game.pickups) >= 3
+    game.phase = "clear"
+    run(game, game.cfg.flow.level_clear_delay + 0.05)
+    assert game.level == level + 1
+
+
+def test_boss_levels_and_endless_mode():
+    cfg = Config()
+    bosses = [n for n in range(1, 31) if level_spec(n, cfg).is_boss]
+    assert bosses == [3, 6, 10, 15, 20, 25, 30]
+    assert level_spec(15, cfg).boss_cycle == 1
+
+
+# ----------------------------------------------------------------------
+# Levels and flow
+# ----------------------------------------------------------------------
+def test_level_one_is_drones_only_and_levels_progress():
+    game = Game(seed=4)
+    game.start_run()
+    seen = set()
+    for _ in range(60 * 120):
+        for enemy in game.enemies:
+            seen.add(enemy.kind)
+            enemy.alive = False
+        game.enemy_shots.clear()
+        game.step(IDLE)
+        if game.level >= 2:
+            break
+    assert game.level == 2
+    assert seen <= {"drone", "cargo"}
+
+
+def test_waves_are_random_but_seeded():
+    cfg = Config()
+    spec = level_spec(5, cfg)
+    import random
+    a = build_wave(spec, 2, cfg, random.Random(1))
+    b = build_wave(spec, 2, cfg, random.Random(1))
+    c = build_wave(spec, 2, cfg, random.Random(2))
+    key = lambda w: [(s.kind, s.pattern, round(s.start[0])) for s in w]  # noqa: E731
+    assert key(a) == key(b) and key(a) != key(c)
+
+
+def test_supply_pod_drops_two_pickups():
+    game = new_game()
+    pod = add_enemy(game, "cargo")
+    game._damage_enemy(pod, 100)
+    assert len(game.pickups) == 2
+
+
+def test_game_over_is_emitted_once_per_run_and_restart_cleans_up():
+    game = new_game(seed=5)
+    first = game.run_id
+    give(game, "rail")
+    give(game, "magnet")
+    game.score = 4321
+    game._drop_pickup(200, 200)
+    for _ in range(3):
+        game.ship.invulnerable_timer = 0
+        game.ship.hurt_timer = 0
+        game.ship.alive = True
+        hit_ship(game, 1000)
     run(game, 5)
     events = game.drain_events()
     over = of_type(events, "game_over")
-    assert len(over) == 1
-    assert over[0]["run_id"] == game.run_id and over[0]["seed"] == 5
-    game._end_run()                         # even if something calls it again
+    assert len(over) == 1 and over[0]["seed"] == 5 and over[0]["level"] == 1
+    game._end_run()
     assert of_type(game.drain_events(), "game_over") == []
 
     assert game.restart()
-    assert of_type(game.drain_events(), "run_started")
-    hold_fire(game)
-    for _ in range(3):
-        wait_until_vulnerable(game)
-        shoot_ship(game)
-        game.step(IDLE)
-    run(game, 5)
-    assert len(of_type(game.drain_events(), "game_over")) == 1
-
-
-def test_restart_cleans_up_everything():
-    game = new_game(seed=9)
-    first_run = game.run_id
-    give(game, "shield")
-    give(game, "spread")
-    game.score = 12345
-    game.specials = 0
-    game._start_wave(3)
-    game._fire_player()
-    game._maybe_drop(200, 200, 1.0, guaranteed=True)
-    shoot_ship(game)
-    game.lives = 1
-    game.powerups.pop("shield")
-    game.step(IDLE)
-    run(game, 3)
-    assert game.state == GAME_OVER
-    assert game.high_score >= 12345
-
-    assert game.restart()
-    assert game.state == PLAYING
-    assert game.run_id != first_run
-    assert (game.score, game.wave, game.lives) == (0, 1, 3)
-    assert game.specials == game.cfg.player.special_start
-    assert game.powerups == {} and game.pickups == [] and game.enemy_bullets == []
-    assert game.bullets == [] and game.boss is None
-    assert game.ship.alive and not game.game_over_emitted
-    assert game.high_score >= 12345         # session high score survives restarts
+    assert game.state == PLAYING and game.run_id != first
+    assert (game.score, game.level, game.lives) == (0, 1, 3)
+    ship = game.ship
+    assert ship.weapon is None and ship.buffs == {} and ship.hull == game.cfg.player.max_hull
+    assert game.pickups == [] and game.enemy_shots == [] and game.boss is None
+    assert game.shock_charge == 1.0 and game.high_score >= 4321
 
 
 def test_restart_is_ignored_mid_run_and_on_title():
@@ -285,13 +448,22 @@ def test_pause_freezes_the_simulation():
     game = new_game()
     give(game, "spread")
     assert game.set_paused(True)
-    before = (game.ticks, game.powerups["spread"], game.origin[0], game.ship.x)
+    before = (game.ticks, game.ship.weapon_time, game.ship.x)
     run(game, 3, InputState(right=True, fire=True))
-    assert (game.ticks, game.powerups["spread"], game.origin[0], game.ship.x) == before
+    assert (game.ticks, game.ship.weapon_time, game.ship.x) == before
     assert game.set_paused(False)
-    assert not game.set_paused(False)       # no duplicate resume events
+    assert not game.set_paused(False)
     run(game, 0.5, InputState(right=True))
-    assert game.ship.x > before[3]
+    assert game.ship.x > before[2]
+
+
+def test_enemies_never_fire_from_point_blank():
+    game = new_game()
+    game.shots_cap = 99
+    close = add_enemy(game, "striker", y=game.ship.y - game.cfg.enemy.safe_distance + 10)
+    far = add_enemy(game, "striker", y=game.ship.y - game.cfg.enemy.safe_distance - 10)
+    assert not game.can_enemy_fire(close)
+    assert game.can_enemy_fire(far)
 
 
 # ----------------------------------------------------------------------
@@ -303,64 +475,30 @@ def test_movement_and_timers_do_not_depend_on_frame_rate():
         game = new_game()
         give(game, "spread")
         x0 = game.ship.x
-        for _ in range(fps):                # one second of frames
+        for _ in range(fps):
             game.advance(1 / fps, InputState(right=True))
-        results.append((game.ship.x - x0, game.powerups["spread"], game.ticks))
+        results.append((game.ship.x - x0, game.ship.weapon_time, game.ticks))
+    step = 1 / game.cfg.display.sim_hz
     for moved, remaining, ticks in results:
         assert abs(ticks - results[0][2]) <= 1
-        assert abs(moved - results[0][0]) <= game.cfg.player.speed / game.cfg.display.sim_hz + 1e-6
-        assert abs(remaining - results[0][1]) <= 1 / game.cfg.display.sim_hz + 1e-6
+        assert abs(moved - results[0][0]) <= game.cfg.player.speed * step + 1e-6
+        assert abs(remaining - results[0][1]) <= step + 1e-6
 
 
 def test_long_stalls_do_not_fast_forward():
     game = new_game()
-    steps = game.advance(5.0, IDLE)
-    assert steps == game.cfg.display.max_steps_per_frame
+    assert game.advance(5.0, IDLE) == game.cfg.display.max_steps_per_frame
 
 
 def test_same_seed_and_inputs_give_the_same_run():
     def play(seed):
         game = Game(seed=seed)
         game.start_run()
-        for _ in range(120 * 90):
+        for _ in range(60 * 90):
             game.step(autopilot(game))
             if game.state != PLAYING:
                 break
-        return (game.score, game.wave, game.lives, game.kills, game.ticks,
-                [(round(e.x, 3), round(e.y, 3), e.hp) for e in game.enemies])
+        return (game.score, game.level, game.wave, game.lives, game.kills, game.ticks,
+                round(game.ship.hull, 3), [(e.kind, round(e.x, 2), round(e.y, 2)) for e in game.enemies])
     assert play(77) == play(77)
     assert play(77) != play(78)
-
-
-# ----------------------------------------------------------------------
-# Fairness
-# ----------------------------------------------------------------------
-def test_early_waves_are_approachable():
-    cfg = Config()
-    first = plan_wave(1, cfg, Game(cfg).rng)
-    assert {kind for kind, _, _ in first.enemies} == {"standard"}
-    assert not first.aimed_shots and first.max_divers == 0
-    assert first.max_enemy_bullets <= 2
-    # A shot leaves at least ~0.5 s to react even at the top bullet speed.
-    assert cfg.enemy_fire.safe_distance / cfg.enemy_fire.bullet_speed_max >= 0.5
-
-
-def test_boss_fan_always_leaves_a_gap_wider_than_the_ship():
-    cfg = Config()
-    ship_y = cfg.display.height - cfg.player.bottom_margin - cfg.player.size[1] / 2
-    distance = ship_y - (cfg.boss.y + cfg.boss.size[1] / 2)
-    gap = distance * math.tan(math.radians(cfg.boss.fan_step))   # neighbouring bullets
-    ship_hitbox = cfg.player.size[0] * cfg.player.hitbox_scale
-    assert gap - cfg.enemy_fire.bullet_size[0] > ship_hitbox * 1.5
-
-
-def test_enemies_do_not_fire_from_point_blank():
-    game = new_game()
-    for enemy in game.enemies:
-        enemy.y = game.ship.y - game.cfg.enemy_fire.safe_distance + 10
-        enemy.slot = (enemy.slot[0], 0)
-    assert all(game.ship.y - e.y < game.cfg.enemy_fire.safe_distance for e in game.enemies)
-    game.banner_timer = 0
-    game.fire_timer = 0
-    game._update_enemy_fire(game.dt)
-    assert all(e.charge_timer <= 0 for e in game.enemies)

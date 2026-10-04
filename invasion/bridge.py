@@ -62,8 +62,9 @@ _JS_SHIM = r"""
 
 # Game events forwarded to the host as-is (besides ready / state).
 FORWARDED_EVENTS = {
-    "run_started", "wave_started", "wave_cleared", "boss_spawned", "boss_defeated",
-    "player_hit", "pickup", "paused", "resumed", "game_over",
+    "run_started", "level_started", "wave_started", "level_cleared", "boss_spawned",
+    "boss_stage", "boss_defeated", "player_destroyed", "pickup", "paused", "resumed",
+    "game_over",
 }
 
 # Commands the host may send. Anything else is ignored.
@@ -144,8 +145,13 @@ def create_bridge():
 
 
 class StateReporter:
-    """Sends a compact state event whenever it changes, at most every
-    min_interval seconds for score-only changes."""
+    """Sends a compact state event whenever it changes. Changes to lives,
+    level, wave, pause or game state go out at once; fast-changing values
+    (score, hull, ammo, timers) at most every min_interval seconds."""
+
+    IMMEDIATE = ("state", "paused", "level", "wave", "lives", "run_id")
+    FIELDS = IMMEDIATE + ("score", "multiplier", "hull", "armor", "shield", "weapon", "buffs",
+                          "shock", "boss")
 
     def __init__(self, bridge, min_interval=0.25):
         self.bridge = bridge
@@ -155,13 +161,11 @@ class StateReporter:
 
     def update(self, snapshot, frame_dt):
         self.since += frame_dt
-        state = {k: snapshot[k] for k in ("state", "paused", "score", "wave", "lives",
-                                          "specials", "shield", "powerups", "run_id")}
+        state = {k: snapshot[k] for k in self.FIELDS}
         if state == self.last:
             return
-        score_only = self.last is not None and all(
-            state[k] == self.last[k] for k in state if k not in ("score", "shield", "powerups"))
-        if score_only and self.since < self.min_interval:
+        urgent = self.last is None or any(state[k] != self.last[k] for k in self.IMMEDIATE)
+        if not urgent and self.since < self.min_interval:
             return
         self.last = state
         self.since = 0.0

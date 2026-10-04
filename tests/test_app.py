@@ -36,12 +36,12 @@ def test_autoplay_smoke_run():
 
 def test_keyboard_flow_and_no_wide_bullet_cheat():
     app = App(seed=3)
-    width = app.cfg.player.bullet_size[0]
+    width = app.cfg.player.blaster_size[0]
     for key in (pygame.K_t, pygame.K_RETURN):
         pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=key))
     app.frame(1 / 60)
     assert app.game.state == PLAYING
-    assert app.cfg.player.bullet_size[0] == width
+    assert app.cfg.player.blaster_size[0] == width
     pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_p))
     app.frame(1 / 60)
     assert app.game.paused
@@ -64,7 +64,7 @@ def test_host_commands_and_events():
     x0 = app.game.ship.x
     for _ in range(30):
         app.frame(1 / 60)
-    assert app.game.ship.x > x0 and app.game.bullets
+    assert app.game.ship.x > x0 and app.game.shots
 
     bridge.commands = [{"type": "pause"}]
     app.frame(1 / 60)
@@ -78,9 +78,10 @@ def test_host_commands_and_events():
 def test_controls_merge_keyboard_and_virtual_input():
     controls = Controls()
     controls.key_down(pygame.K_a)
-    controls.set_virtual(fire=True)
+    controls.key_down(pygame.K_w)
+    controls.set_virtual(fire=True, down=True)
     state = controls.state()
-    assert state.left and state.fire and not state.right
+    assert state.left and state.up and state.down and state.fire and not state.right
     controls.key_down(pygame.K_LSHIFT)
     assert controls.state().special
     controls.consume_edges()
@@ -92,12 +93,14 @@ def test_controls_merge_keyboard_and_virtual_input():
 def test_state_reporter_throttles_score_only_changes():
     bridge = RecordingBridge()
     reporter = StateReporter(bridge, min_interval=0.25)
-    snap = {"state": PLAYING, "paused": False, "score": 0, "wave": 1, "lives": 3,
-            "specials": 2, "shield": 0.0, "powerups": {}, "run_id": "1-1"}
+    snap = {k: None for k in StateReporter.FIELDS}
+    snap.update(state=PLAYING, paused=False, score=0, level=1, wave=1, lives=3, run_id="1-1")
     reporter.update(snap, 0.016)
-    reporter.update(dict(snap, score=50), 0.016)        # throttled
-    reporter.update(dict(snap, score=50, lives=2), 0.016)  # lives change: immediate
+    reporter.update(dict(snap, score=50, hull=90), 0.016)        # throttled
+    reporter.update(dict(snap, score=50, lives=2), 0.016)         # lives change: immediate
     assert [e.get("lives") for e in bridge.sent] == [3, 2]
+    reporter.update(dict(snap, score=80, lives=2), 0.3)           # after the interval
+    assert bridge.sent[-1]["score"] == 80
 
 
 def test_failing_bridge_is_disabled_not_fatal():

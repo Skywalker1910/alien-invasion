@@ -1,6 +1,6 @@
 # 👾 Alien Invasion
 
-A 2D arcade space shooter I built in Python with Pygame. It runs on the desktop and in the browser.
+A fast 2D arcade space shooter I built in Python with Pygame. It runs on the desktop and in the browser.
 
 ## How this project started
 
@@ -16,49 +16,84 @@ Every change goes in as its own commit, so the git history shows how the game gr
 
 ## How to play
 
-Aliens march across the screen in formation and drop down each time they hit an edge. Shoot them before they land!
+Enemy squadrons swoop in from the corners, slide in from the sides, stream across the screen and dive at you. Every run is different: the waves are random, but the same seed always gives the same run.
 
-- You have **3 lives**, and each hit costs exactly one. After a hit your ship comes back blinking and can't be hurt for 2 seconds.
-- Clear a wave and the next one arrives in a new formation with a different mix of enemies.
-- **Every 5th wave is a boss.** It glows red before each attack, so watch for that.
-- Aliens glow before they shoot, and they never fire from point-blank range.
-- Your bullets can shoot enemy bullets out of the air.
+- Your ship has a **hull bar**. Bullets, beams, rams and mines chip away at it. You have **3 ships**.
+- After a hit you flash for a moment and can't be hit again right away, so one burst can't wipe you out.
+- Each level has its own sector, enemy mix and hazards (asteroid fields, minefields). Clear every wave to warp to the next sector.
+- **Levels 3, 6 and 10 are boss fights.** After level 10 it keeps going in endless mode, with a boss every 5 levels.
+- Kill enemies quickly one after another to build a **combo multiplier** (up to x5). Taking damage resets it.
 
 ### Enemies
 
-| Enemy | What to know |
-| --- | --- |
-| 🟢 Standard | One hit. Shoots straight down. |
-| 🔵 Armored | Three hits (the little bars show what's left). From wave 4 they aim at you. |
-| 🟠 Agile | One hit. Shakes for a moment, then dives at you in a swaying path. |
-| 🔴 Boss | Big health bar. Fires aimed bursts and bullet fans, and gets angrier at half health. |
+| Ship | HP | What it does |
+| --- | --- | --- |
+| 🟢 Drone | 1 | Small and quick. Single shots. From level 2 they sometimes dive at you. |
+| 🟡 Wasp | 2 | Drops in, shakes for a moment, then dives straight at you. |
+| 🔵 Striker | 4 | Strafes side to side and fires twin shots at you. |
+| 🟠 Lancer | 8 | Moves above you, draws a thin red warning line, then fires a beam down it. Get out of the line! |
+| 🟣 Guardian | 16 | Heavy armor. Fires a spread of energy orbs. |
+| 🔴 Dreadnought | 38 | A battleship. Fires homing missiles (you can shoot them down) plus side guns. |
+| 📦 Supply Pod | 6 | Doesn't shoot. Crosses the screen once per level. Shoot it for **two** capsules. |
+| 🪨 Asteroid / 💣 Mine | – | Hazards. Mines blink before they blow up, and shooting one sets it off safely. |
+
+Enemy health goes up a little every level.
+
+### Bosses
+
+Each boss is a huge mothership parked at the top of the screen, covered in weapons. **The hull is armored**, so your shots bounce off it. You have to hit the glowing weapons themselves. Every boss fights in **3 stages**:
+
+1. The outer weapons are online. Destroy all of them.
+2. The armor opens and the inner weapons come online.
+3. The core is exposed and fights back hard. Destroy it to win.
+
+| Level | Boss | Weapons |
+| --- | --- | --- |
+| 3 | Harbinger | cannons → spread turrets → core |
+| 6 | Leviathan | cannons and missile pods → lasers and a drone hangar → core |
+| 10 | Overmind | cannons, spread turrets and a hangar → lasers and missile pods → core |
+
+Every boss attack is telegraphed: turrets glow red before firing, and lasers draw a warning line first.
 
 ### Power-ups
 
-Defeated enemies sometimes drop a power-up. Fly into it to collect it.
+Wrecks sometimes drop capsules that fall toward the bottom of the screen. Fly into them to collect them. **If you miss one, it's gone.** If you go about 8 seconds without a drop, your next kill always drops one.
 
-| Pickup | Effect |
+**Hexagon capsules are weapons.** You hold one weapon at a time. A new one replaces the old one, and the same one refills it. When the ammo or time runs out you're back to the basic blaster (unlimited).
+
+| Weapon | Limit | What it does |
+| --- | --- | --- |
+| Spread Shot | 12 s | 5 bullets in a fan |
+| Rapid Fire | 240 shots | Very fast stream of bullets |
+| Railgun | 26 shots | Heavy shot that pierces everything in a line |
+| Laser Beam | 7 s of firing | Continuous beam that melts the first thing it touches (only drains while you fire) |
+| Homing Missiles | 40 volleys | Pairs of missiles that chase targets |
+| Plasma Cannon | 16 shots | Big orb that explodes and damages everything nearby |
+| Chain Lightning | 30 shots | Instantly zaps the nearest enemy and jumps to 4 more |
+| Flak Burst | 32 shots | Shell that bursts into shrapnel |
+
+**Circle capsules are upgrades.**
+
+| Upgrade | What it does |
 | --- | --- |
-| **S** Shield | Blocks bullets and rams for 8 s |
-| **3** Spread | Fires 3 bullets in a fan for 10 s |
-| **P** Pierce | Bullets pass through up to 3 extra enemies for 10 s |
-| **+** Extra life | One more life, up to 5 (rare) |
+| Repair | +35 hull (drops more often when your hull is low) |
+| Shield | Blocks the next 6 hits completely (stacks up to 10) |
+| Armor | +50 armor that soaks damage before the hull (up to 100) |
+| Shock Charge | Instantly recharges your shockwave |
+| Wingmen | Two little drones fly with you and shoot for 15 s |
+| Overdrive | Double damage and faster fire for 8 s |
+| Magnet | Pulls nearby capsules to you for 14 s |
+| Extra Ship | One more ship (rare, up to 5) |
 
-The rules are kept simple:
-- Different power-ups stack. Spread and pierce together give you piercing spread shots.
-- Picking up one you already have resets its timer to full. Timers never add up.
-- The bottom-left corner shows every active power-up and the time it has left. A bar blinks when it's about to run out.
-- Losing a life removes your power-ups, but you keep your special charges.
-- A new game always starts clean.
-- If aliens reach your row, you lose a life even with a shield on.
+Timed upgrades reset to full if you pick them up again. Losing a ship clears your weapon and upgrades, but the shockwave keeps its charge.
 
 ### Controls
 
 | Key | What it does |
 | --- | --- |
-| ⬅️ / ➡️ or A / D | Move |
+| Arrows or WASD | Fly (left/right across the screen, up/down in the lower half) |
 | Space (hold) | Shoot |
-| Shift | Special shockwave: clears every enemy bullet and damages nearby aliens. You start with 2 charges and earn 1 per boss (max 3). |
+| Shift | **Shockwave**: a ring that clears all enemy bullets and hits hard enough to kill a Guardian. Takes 16 s to recharge. |
 | P or Esc | Pause / resume |
 | R | Play again after game over |
 | Space / Enter / click | Start from the title screen |
@@ -86,7 +121,15 @@ python build_web.py --serve   # open http://localhost:8000
 python build_web.py           # just build into build/web/
 ```
 
-My portfolio page embeds this build. The game reports things like run started, score and game over to the page, and the page can pause it or send touch controls. The page handles player names and the leaderboard, never the game. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
+My portfolio page embeds this build. The game reports things like run started, score, hull, level and game over to the page, and the page can pause it or send touch controls. The page handles player names and the leaderboard, never the game. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
+
+### Artwork
+
+All the ships, bosses, turrets and icons are drawn by code in `tools/make_art.py` and saved as PNGs in `assets/images/`. To regenerate them, for example after changing a boss's weapon positions, run:
+
+```bash
+python tools/make_art.py
+```
 
 ### Tests
 
@@ -95,24 +138,33 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The tests check the important rules: 3 lives means 3 hits, one collision never costs two lives, shields and weapons expire on time, restarting cleans everything up, waves and bosses arrive in order, game over is reported once per run, the same seed replays the same run, and the frame rate doesn't change how fast anything moves.
+The tests check the important rules:
+- armor soaks damage before the hull, and shields block an exact number of hits
+- one burst can't chain damage, and 3 ships means 3 hull bars
+- every weapon actually damages things, and ammo, refills and time limits work
+- upgrades refresh and expire, missed capsules disappear, and the magnet and the drop guarantee work
+- the shockwave kills a Guardian and then recharges
+- bosses only take damage on their active weapons and always go through 3 stages
+- levels progress, and game over is reported once per run
+- a restart cleans everything up
+- the same seed replays the same run, and the frame rate doesn't change game speed
 
 ## Tweaking the balance
 
-Every number lives in `invasion/config.py`, grouped by topic, with units in the comments (pixels, pixels per second, seconds, probabilities). The ones I tune most:
+Every number lives in `invasion/config.py`, with units in the comments. Enemy stats, weapons, upgrades and bosses are all plain tables there. Level layouts (which enemies, how many waves, hazards) are in `invasion/levels.py`. The settings I tune most:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `player.start_lives` / `max_lives` | 3 / 5 | Lives at the start / life cap |
-| `player.invulnerable_time` | 2.0 s | Blinking grace period after a hit |
-| `player.fire_cooldown` | 0.24 s | Time between your shots |
-| `enemy_fire.interval` → `interval_min` | 1.7 s → 0.6 s | Time between enemy shots, wave 1 → late waves |
-| `enemy_fire.max_bullets` → `max_bullets_cap` | 2 → 6 | Enemy bullets on screen at once |
-| `enemy_fire.safe_distance` | 170 px | Enemies never shoot from closer than this |
-| `boss.every` | 5 | Waves between bosses |
-| `powerups.weights` | 35 / 30 / 25 / 10 | Shield / spread / pierce / life drop odds |
-| `powerups.durations` | 8 / 10 / 10 s | How long timed power-ups last |
-| `enemy.*.drop_chance` | 5–14 % | Chance an enemy drops something |
+| `player.speed` | 560 | How fast your ship flies |
+| `player.max_hull` / `start_lives` | 100 / 3 | Hull per ship / ships per run |
+| `player.hurt_iframes` | 0.35 s | Grace time after taking a hit |
+| `player.blaster_cooldown` | 0.12 s | Basic fire rate |
+| `player.shock_recharge` / `shock_damage` | 16 s / 20 | Shockwave recharge time and damage |
+| `enemies[...]` | see table | HP, points, speed, fire rate, damage and drop chance for every enemy |
+| `enemy.hp_per_level` / `fire_rate_per_level` | 7 % / 5 % | How much tougher each level gets |
+| `drops.pity_time` | 8 s | Longest stretch without a drop |
+| `weapons[...]` / `pickups[...]` | see tables | Ammo, duration, damage and drop weight of every power-up |
+| `bosses` / `boss.levels` | 3 bosses / 3, 6, 10 | Boss weapons (position, HP, stage, fire rate) and where they appear |
 
 ## What's in the folder
 
@@ -120,15 +172,18 @@ Every number lives in `invasion/config.py`, grouped by topic, with units in the 
 | --- | --- |
 | `main.py` | Starts the game (desktop and browser) |
 | `alien_invasion.py` | The old desktop launcher, kept so the original command still works |
-| `invasion/config.py` | All the balance numbers |
-| `invasion/game.py` | The game rules: lives, waves, power-ups, collisions. No drawing. |
-| `invasion/waves.py` | Wave formations, enemy mix and difficulty per wave |
-| `invasion/entities.py` | Ship, aliens, boss, bullets, pickups |
+| `invasion/config.py` | All the numbers: player, enemies, weapons, upgrades, bosses |
+| `invasion/levels.py` | Sectors, enemy mixes, squadron patterns, boss levels |
+| `invasion/game.py` | The game rules: damage, pickups, levels, bosses, collisions. No drawing. |
+| `invasion/ai.py` | How each enemy and boss weapon moves and attacks |
+| `invasion/weapons.py` | The blaster and the 8 collectible weapons |
+| `invasion/entities.py` | Ship, enemies, boss, shots, capsules |
 | `invasion/render.py` | Drawing, effects, HUD and menus |
 | `invasion/controls.py` | Keyboard plus virtual (touch) input |
 | `invasion/app.py` | The window and the main loop |
 | `invasion/bridge.py` | Talks to the web page in the browser build (does nothing on desktop) |
-| `assets/images/` | Ship and alien pictures (PNG) |
+| `assets/images/` | Sprites (generated by `tools/make_art.py`) |
+| `tools/make_art.py` | Draws all the sprites |
 | `build_web.py` | Builds the browser version |
 | `tests/` | Automated tests |
 | `docs/` | Browser host integration guide and an example host page |
@@ -137,13 +192,15 @@ Every number lives in `invasion/config.py`, grouped by topic, with units in the 
 
 - ✅ The original game from my college days
 - ✅ Aliens shoot back (front row only, with a limit on bullets so it stays fair)
-- ✅ **Arcade upgrade:** three enemy types, six formations, bosses, power-ups, a special attack, pause/restart, new HUD and effects, frame-rate independent timing, a fixed lives bug (the old code gave you 4 hits), tests, and a browser build
+- ✅ Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
+- ✅ **Big rework:** random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
 
 ## Ideas for what's next
 
 - Sound effects and music
 - Saving the high score between games
 - On-screen touch controls inside the game itself
+- A "2.5D" look: perspective starfield, banking ships, parallax layers
 - Recording inputs so a run's score can be replayed and verified
 
 ## License

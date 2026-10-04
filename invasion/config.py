@@ -1,15 +1,28 @@
-"""Every tunable number in the game lives here.
+"""Every tunable number and every piece of game content lives here.
 
 Units used throughout:
   * distances and sizes are logical pixels (the playfield is always
-    Display.width x Display.height, whatever the real window size is)
+    DisplayConfig.width x height, whatever the real window size is)
   * speeds are pixels per second
   * durations, cooldowns and intervals are seconds
+  * damage and hit points are plain numbers (the basic blaster does 1)
   * chances are probabilities between 0 and 1
 
 Nothing in this file depends on pygame, so it can be imported anywhere.
 """
 from dataclasses import dataclass, field
+
+WHITE = (240, 244, 255)
+GREEN = (110, 255, 150)
+CYAN = (90, 220, 255)
+YELLOW = (255, 225, 90)
+ORANGE = (255, 160, 60)
+RED = (255, 80, 90)
+VIOLET = (190, 120, 255)
+PINK = (255, 110, 200)
+STEEL = (170, 185, 210)
+GOLD = (255, 200, 80)
+TEAL = (80, 240, 210)
 
 
 @dataclass
@@ -19,181 +32,270 @@ class DisplayConfig:
     title: str = "Alien Invasion"
     fps_cap: int = 60
     # The simulation always advances in fixed steps of 1 / sim_hz seconds,
-    # no matter how fast frames are drawn. That keeps movement, cooldowns
-    # and spawns frame-rate independent and makes seeded runs repeatable.
-    sim_hz: int = 120
+    # however fast frames are drawn. That keeps movement, cooldowns and
+    # spawns frame-rate independent and makes seeded runs repeatable.
+    sim_hz: int = 60
     # After a long stall (tab in background, window drag) drop the backlog
     # instead of fast-forwarding through it.
-    max_steps_per_frame: int = 12
-    hud_height: int = 40
+    max_steps_per_frame: int = 6
+    hud_height: int = 36
 
 
 @dataclass
 class PlayerConfig:
-    size: tuple = (52, 42)
-    hitbox_scale: float = 0.7          # forgiving hitbox, smaller than the sprite
-    bottom_margin: int = 14
-    speed: float = 380.0
-    start_lives: int = 3               # 3 lives = exactly 3 hits
-    max_lives: int = 5                 # extra-life pickups never go above this
-    fire_cooldown: float = 0.24
-    max_bullets: int = 4               # normal weapon, player bullets on screen
-    bullet_speed: float = 760.0
-    bullet_size: tuple = (4, 16)
-    respawn_delay: float = 1.2         # ship is gone this long after a hit
+    size: tuple = (48, 54)
+    hitbox_scale: float = 0.55         # forgiving hitbox, smaller than the sprite
+    speed: float = 560.0
+    top_zone: float = 0.52             # ship can fly up to this fraction of the screen
+    bottom_margin: int = 46            # room for the bottom HUD bar
+    max_hull: float = 100.0
+    max_armor: float = 100.0
+    max_shield: int = 10               # shield charges (each blocks one hit)
+    start_lives: int = 3
+    max_lives: int = 5
+    hurt_iframes: float = 0.35         # after taking damage, ignore damage this long
+    respawn_delay: float = 1.0
     invulnerable_time: float = 2.0     # blinking grace period after respawning
-    game_over_delay: float = 1.4       # let the last explosion play out
-    # Special attack (Shift): a shockwave that clears every enemy bullet and
-    # damages aliens within special_radius of the ship (and chips the boss).
-    special_start: int = 2
-    special_max: int = 3
-    special_cooldown: float = 1.0
-    special_damage: int = 2
-    special_radius: float = 300.0
-    special_boss_fraction: float = 0.12
-    special_per_boss: int = 1          # charges gained for beating a boss
+    game_over_delay: float = 1.6
+    # Basic blaster, always available, unlimited.
+    blaster_cooldown: float = 0.12
+    blaster_damage: float = 1.0
+    blaster_speed: float = 980.0
+    blaster_size: tuple = (4, 18)
+    # Shockwave (Shift): an expanding ring that shreds anything it passes,
+    # then needs time to recharge.
+    shock_recharge: float = 16.0
+    shock_damage: float = 20.0             # kills a guardian, not a dreadnought
+    shock_part_damage: float = 10.0    # damage to boss weapons inside the ring
+    shock_radius: float = 520.0
+    shock_speed: float = 1300.0
+    # Combo: kills in quick succession raise the score multiplier.
+    combo_window: float = 2.2
+    combo_step: int = 6                # kills per +1 multiplier
+    combo_max: int = 5
 
 
 @dataclass
-class EnemyType:
-    hp: int
+class WeaponSpec:
+    label: str
+    color: tuple
+    ammo: int = 0                      # limited shots (0 = limited by time instead)
+    duration: float = 0.0              # limited time (seconds of use)
+    cooldown: float = 0.2
+    damage: float = 1.0
+    speed: float = 900.0
+    count: int = 1                     # projectiles per shot
+    angle: float = 0.0                 # degrees between projectiles / jitter
+    pierce: int = 0                    # extra enemies a projectile passes through
+    splash_radius: float = 0.0
+    splash_damage: float = 0.0
+    turn_rate: float = 0.0             # homing, radians per second
+    chain: int = 0                     # extra targets for chain lightning
+    chain_range: float = 0.0
+    fuse: float = 0.0                  # flak: seconds before bursting
+    shrapnel: int = 0
+    size: tuple = (4, 16)
+
+
+def default_weapons():
+    return {
+        "spread": WeaponSpec("Spread Shot", YELLOW, duration=12.0, cooldown=0.15, damage=1.0,
+                             speed=920.0, count=5, angle=9.0, size=(5, 14)),
+        "rapid": WeaponSpec("Rapid Fire", ORANGE, ammo=240, cooldown=0.05, damage=1.0,
+                            speed=1150.0, angle=4.0, size=(3, 14)),
+        "rail": WeaponSpec("Railgun", CYAN, ammo=26, cooldown=0.36, damage=6.0, speed=2100.0,
+                           pierce=99, size=(6, 44)),
+        "laser": WeaponSpec("Laser Beam", PINK, duration=7.0, damage=18.0, size=(12, 0)),
+        "homing": WeaponSpec("Homing Missiles", RED, ammo=40, cooldown=0.24, damage=3.0,
+                             speed=560.0, count=2, turn_rate=7.0, size=(6, 14)),
+        "plasma": WeaponSpec("Plasma Cannon", VIOLET, ammo=16, cooldown=0.42, damage=7.0,
+                             speed=620.0, splash_radius=95.0, splash_damage=4.0, size=(18, 18)),
+        "chain": WeaponSpec("Chain Lightning", TEAL, ammo=30, cooldown=0.24, damage=3.0,
+                            chain=4, chain_range=240.0),
+        "flak": WeaponSpec("Flak Burst", GOLD, ammo=32, cooldown=0.3, damage=2.0, speed=720.0,
+                           fuse=0.3, shrapnel=10, size=(9, 9)),
+    }
+
+
+@dataclass
+class PickupSpec:
+    label: str
+    color: tuple
+    weight: float                      # relative drop weight
+    value: float = 0.0
+    duration: float = 0.0
+
+
+def default_pickups():
+    return {
+        "repair": PickupSpec("Repair", GREEN, 16, value=35),           # +35 hull
+        "shield": PickupSpec("Shield", CYAN, 12, value=6),              # blocks 6 hits
+        "armor": PickupSpec("Armor", STEEL, 10, value=50),             # +50 armor
+        "shock": PickupSpec("Shock Charge", WHITE, 7),                  # recharge shockwave
+        "wingmen": PickupSpec("Wingmen", TEAL, 7, duration=15),
+        "overdrive": PickupSpec("Overdrive", PINK, 6, duration=8),      # x2 damage, faster fire
+        "magnet": PickupSpec("Magnet", GOLD, 6, duration=14),           # pulls pickups in
+        "life": PickupSpec("Extra Ship", GREEN, 2),
+    }
+
+
+@dataclass
+class DropConfig:
+    weapon_weight: float = 6.0         # weight of each of the 8 weapons
+    max_on_screen: int = 4
+    fall_speed: float = 150.0
+    sway: float = 22.0
+    pity_time: float = 8.0             # no drop for this long -> next kill drops
+    low_hull_repair_boost: float = 2.5 # repair weight multiplier below half hull
+    magnet_radius: float = 340.0
+    magnet_speed: float = 620.0
+    bonus_points: int = 250            # e.g. repair at full hull
+
+
+@dataclass
+class EnemySpec:
+    label: str
+    hp: float
     points: int
     size: tuple
-    tint: tuple
-    drop_chance: float
-    fire_weight: float                 # how likely this type is picked to shoot
+    speed: float
+    ram_damage: float
+    fire: str = "none"                 # none, single, twin, beam, spread, missile
+    fire_interval: float = 3.0
+    bullet_speed: float = 320.0
+    bullet_damage: float = 8.0
+    drop_chance: float = 0.05
+    threat: int = 1                    # wave budget cost
+    hazard: bool = False
+
+
+def default_enemies():
+    return {
+        "drone": EnemySpec("Drone", 1, 40, (36, 30), 300, 14, "single", 3.0, 330, 7, 0.06, 1),
+        "wasp": EnemySpec("Wasp", 2, 70, (30, 34), 520, 26, "none", drop_chance=0.04, threat=1),
+        "striker": EnemySpec("Striker", 4, 110, (44, 38), 330, 18, "twin", 2.1, 380, 8, 0.10, 2),
+        "lancer": EnemySpec("Lancer", 8, 220, (44, 52), 300, 20, "beam", 3.2, 0, 24, 0.14, 3),
+        "guardian": EnemySpec("Guardian", 16, 380, (66, 56), 160, 28, "spread", 2.4, 330, 9, 0.22, 5),
+        "dreadnought": EnemySpec("Dreadnought", 38, 1000, (100, 82), 95, 40, "missile", 2.6, 250, 15,
+                                 1.0, 9),
+        "cargo": EnemySpec("Supply Pod", 6, 150, (58, 34), 210, 0, drop_chance=1.0, threat=0),
+        "asteroid": EnemySpec("Asteroid", 5, 25, (48, 48), 190, 22, drop_chance=0.03, hazard=True,
+                              threat=0),
+        "mine": EnemySpec("Mine", 2, 30, (28, 28), 120, 0, drop_chance=0.03, hazard=True, threat=0),
+    }
 
 
 @dataclass
-class EnemyConfig:
-    standard: EnemyType = field(default_factory=lambda: EnemyType(
-        hp=1, points=50, size=(40, 38), tint=(130, 255, 130),
-        drop_chance=0.05, fire_weight=1.0))
-    armored: EnemyType = field(default_factory=lambda: EnemyType(
-        hp=3, points=150, size=(44, 42), tint=(140, 180, 255),
-        drop_chance=0.14, fire_weight=1.5))
-    agile: EnemyType = field(default_factory=lambda: EnemyType(
-        hp=1, points=120, size=(34, 32), tint=(255, 175, 80),
-        drop_chance=0.10, fire_weight=0.5))
-
-    # Formation grid
-    grid_cols: int = 10
-    grid_rows: int = 5
-    slot_spacing: tuple = (66, 52)
-    top_margin: int = 78
-
-    # Formation marching
-    march_speed: float = 38.0
-    march_speed_per_wave: float = 5.0
-    march_speed_max: float = 95.0
-    march_thin_bonus: float = 55.0     # extra speed as the fleet thins out
-    drop_distance: float = 16.0
-    side_margin: int = 12
-
-    # Agile dives: telegraph (flash + shake), then a swaying dive
-    dive_first_wave: int = 3
-    dive_interval: float = 5.0
-    dive_interval_per_wave: float = -0.35
-    dive_interval_min: float = 2.0
-    dive_telegraph: float = 0.75
-    dive_speed: float = 210.0
-    dive_speed_per_wave: float = 8.0
-    dive_speed_max: float = 300.0
-    dive_sway: float = 70.0
-    dive_sway_hz: float = 0.9
-    return_speed: float = 260.0
-    max_divers: int = 3
-
-    hit_flash: float = 0.12
+class EnemyRules:
+    hit_flash: float = 0.08
+    charge_time: float = 0.3           # glow before an ordinary shot
+    safe_distance: float = 140.0       # never shoot from closer than this to the ship
+    shots_cap: int = 8                 # enemy shots on screen, level 1
+    shots_cap_per_level: int = 2
+    shots_cap_max: int = 26
+    beam_telegraph: float = 0.8
+    beam_time: float = 0.45
+    beam_width: int = 16
+    missile_turn: float = 2.0
+    missile_life: float = 4.5
+    mine_trigger: float = 85.0
+    mine_fuse: float = 0.45
+    mine_radius: float = 90.0
+    mine_damage: float = 24.0
+    wasp_aim: float = 0.4
+    # Per-level scaling (applied to level n as 1 + rate * (n - 1), capped)
+    hp_per_level: float = 0.07
+    fire_rate_per_level: float = 0.05
+    fire_rate_max: float = 1.9
+    bullet_speed_per_level: float = 0.03
+    bullet_speed_max: float = 1.45
 
 
 @dataclass
-class EnemyFireConfig:
-    bullet_size: tuple = (6, 14)
-    bullet_speed: float = 230.0
-    bullet_speed_per_wave: float = 10.0
-    bullet_speed_max: float = 330.0
-    interval: float = 1.7              # seconds between shots on wave 1
-    interval_per_wave: float = -0.12
-    interval_min: float = 0.6
-    max_bullets: int = 2               # enemy bullets on screen on wave 1
-    max_bullets_per_wave: float = 0.5
-    max_bullets_cap: int = 6
-    telegraph: float = 0.35            # shooter glows this long before firing
-    aimed_from_wave: int = 4           # armored aliens aim from this wave on
-    aimed_max_angle: float = 22.0      # degrees from straight down
-    # Never fire from closer than this (vertically) to the ship, so every
-    # shot leaves at least ~0.5 s to react.
-    safe_distance: float = 170.0
-    wave_start_grace: float = 1.0      # extra quiet time after the banner
+class HardpointSpec:
+    kind: str                          # cannon, spread, missile, laser, hangar, core
+    offset: tuple                      # from the boss center
+    hp: float
+    stage: int                         # active (and vulnerable) in this stage
+    interval: float
 
 
 @dataclass
-class BossConfig:
-    every: int = 5                     # waves 5, 10, 15, ... are boss waves
-    size: tuple = (150, 140)
-    tint: tuple = (255, 90, 120)
-    y: float = 150.0
-    speed: float = 110.0
-    speed_phase2: float = 160.0
-    hp: int = 40
-    hp_per_boss: int = 25
-    points: int = 2500
-    points_per_boss: int = 1000
-    pattern_cooldown: float = 1.7
-    pattern_cooldown_phase2: float = 1.15
-    phase2_at: float = 0.5             # fraction of HP left
-    telegraph: float = 0.6
-    bullet_speed: float = 250.0
+class BossSpec:
+    label: str
+    size: tuple
+    speed: float
+    points: int
+    hardpoints: list
+
+
+def default_bosses():
+    hp = HardpointSpec
+    return [
+        BossSpec("Harbinger", (420, 150), 70, 5000, [
+            hp("cannon", (-150, 28), 22, 1, 1.9), hp("cannon", (150, 28), 22, 1, 1.9),
+            hp("spread", (-68, 50), 26, 2, 2.2), hp("spread", (68, 50), 26, 2, 2.2),
+            hp("core", (0, 38), 45, 3, 1.6),
+        ]),
+        BossSpec("Leviathan", (560, 170), 60, 9000, [
+            hp("cannon", (-226, 40), 26, 1, 1.8), hp("cannon", (226, 40), 26, 1, 1.8),
+            hp("missile", (-128, 22), 24, 1, 2.8), hp("missile", (128, 22), 24, 1, 2.8),
+            hp("laser", (-62, 62), 34, 2, 4.0), hp("laser", (62, 62), 34, 2, 4.0),
+            hp("hangar", (0, 18), 34, 2, 5.5),
+            hp("core", (0, 56), 70, 3, 1.4),
+        ]),
+        BossSpec("Overmind", (720, 190), 55, 15000, [
+            hp("cannon", (-300, 44), 30, 1, 1.7), hp("cannon", (300, 44), 30, 1, 1.7),
+            hp("spread", (-200, 60), 32, 1, 2.1), hp("spread", (200, 60), 32, 1, 2.1),
+            hp("hangar", (0, 16), 40, 1, 5.0),
+            hp("laser", (-110, 70), 38, 2, 3.6), hp("laser", (110, 70), 38, 2, 3.6),
+            hp("missile", (-250, 18), 30, 2, 2.4), hp("missile", (250, 18), 30, 2, 2.4),
+            hp("core", (0, 72), 100, 3, 1.2),
+        ]),
+    ]
+
+
+@dataclass
+class BossRules:
+    levels: tuple = (3, 6, 10)         # boss levels; after 10 a boss every 5 levels
+    endless_every: int = 5
+    endless_hp_per_cycle: float = 0.5
+    enter_speed: float = 90.0
+    stage_pause: float = 1.4           # invulnerable breather between stages
+    stage_rage: tuple = (1.0, 0.85, 0.72)  # fire interval multiplier per stage
     burst_count: int = 3
-    burst_gap: float = 0.2
-    fan_count: int = 5
-    fan_step: float = 12.0             # degrees between fan bullets
-    escort_from_boss: int = 2          # second boss onward brings escorts
-    escort_count: int = 6
-
-
-@dataclass
-class PowerUpConfig:
-    size: tuple = (26, 26)
-    fall_speed: float = 120.0
-    max_on_screen: int = 2
-    min_gap: float = 5.0               # seconds between random drops
-    weights: dict = field(default_factory=lambda: {
-        "shield": 35, "spread": 30, "pierce": 25, "life": 10})
-    durations: dict = field(default_factory=lambda: {
-        "shield": 8.0, "spread": 10.0, "pierce": 10.0})
-    spread_angle: float = 11.0         # degrees between spread bullets
-    spread_max_bullets: int = 12
-    pierce_hits: int = 3               # enemies one piercing bullet can pass through
-    life_cap_bonus: int = 1000         # score instead of a life when at max lives
-    boss_drop_guaranteed: bool = True
-    expiry_warning: float = 2.0        # HUD blinks during the last seconds
-
-
-@dataclass
-class ScoreConfig:
-    wave_clear_bonus: int = 100        # multiplied by the wave number
-    bullet_cancel: int = 5             # shooting an enemy bullet out of the air
+    burst_gap: float = 0.14
+    cannon_bullet: tuple = (400.0, 10.0)   # speed, damage
+    spread_bullet: tuple = (330.0, 9.0)
+    spread_count: int = 5
+    spread_step: float = 13.0
+    missile: tuple = (250.0, 16.0)
+    laser_damage: float = 28.0
+    hangar_minions: int = 2
+    minion_cap: int = 6
+    core_ring: int = 12
+    core_bullet: tuple = (300.0, 10.0)
+    part_points: int = 400
 
 
 @dataclass
 class FlowConfig:
-    wave_banner: float = 1.6
-    boss_banner: float = 2.4
-    wave_clear_delay: float = 1.4
+    level_banner: float = 2.0
+    boss_banner: float = 2.6
+    level_clear_delay: float = 2.0
+    wave_max_time: float = 13.0        # next wave comes even if enemies remain
+    wave_trickle: int = 2              # ...or as soon as this few are left
 
 
 @dataclass
 class Config:
     display: DisplayConfig = field(default_factory=DisplayConfig)
     player: PlayerConfig = field(default_factory=PlayerConfig)
-    enemy: EnemyConfig = field(default_factory=EnemyConfig)
-    enemy_fire: EnemyFireConfig = field(default_factory=EnemyFireConfig)
-    boss: BossConfig = field(default_factory=BossConfig)
-    powerups: PowerUpConfig = field(default_factory=PowerUpConfig)
-    score: ScoreConfig = field(default_factory=ScoreConfig)
+    weapons: dict = field(default_factory=default_weapons)
+    pickups: dict = field(default_factory=default_pickups)
+    drops: DropConfig = field(default_factory=DropConfig)
+    enemies: dict = field(default_factory=default_enemies)
+    enemy: EnemyRules = field(default_factory=EnemyRules)
+    bosses: list = field(default_factory=default_bosses)
+    boss: BossRules = field(default_factory=BossRules)
     flow: FlowConfig = field(default_factory=FlowConfig)
-
-    def enemy_type(self, kind):
-        return getattr(self.enemy, kind)
