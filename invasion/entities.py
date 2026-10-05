@@ -21,8 +21,23 @@ class Body:
         return pygame.Rect(round(self.x - self.w / 2), round(self.y - self.h / 2), self.w, self.h)
 
 
+class Slot:
+    """One inventory slot: a stored weapon or a stored timed upgrade."""
+
+    def __init__(self, kind, category, ammo=0, time=0.0):
+        self.kind = kind
+        self.category = category        # "weapon" or "upgrade"
+        self.ammo = ammo                # shots left (ammo weapons)
+        self.time = time                # seconds left (timed weapons / upgrades)
+
+
 class Ship(Body):
-    """The player's ship and everything it carries."""
+    """The player's ship and everything it carries.
+
+    The inventory holds up to PlayerConfig.inventory_slots weapons and timed
+    upgrades. `selected` is the index of the equipped weapon slot, or None
+    for the basic blaster. It always points at a weapon slot.
+    """
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -36,9 +51,8 @@ class Ship(Body):
         self.respawn_timer = 0.0
         self.invulnerable_timer = 0.0
         self.hurt_timer = 0.0
-        self.weapon = None              # name of a collected weapon, None = blaster
-        self.ammo = 0                   # shots left (ammo weapons)
-        self.weapon_time = 0.0          # seconds left (timed weapons)
+        self.inventory = []             # Slot objects, in pickup order
+        self.selected = None            # index of the equipped weapon slot
         self.buffs = {}                 # wingmen / overdrive / magnet -> seconds left
         self.laser_on = False
         self.laser_top = 0.0            # where the beam currently stops
@@ -69,14 +83,47 @@ class Ship(Body):
         self.y = max(height * pc.top_zone, min(self.home_y(self.cfg), self.y))
         self.tilt += (dx - self.tilt) * min(1.0, dt * 12)
 
-    def reset_loadout(self):
-        self.weapon = None
-        self.ammo = 0
-        self.weapon_time = 0.0
-        self.buffs.clear()
-        self.shield = 0
-        self.armor = 0.0
-        self.laser_on = False
+    @property
+    def slot(self):
+        return self.inventory[self.selected] if self.selected is not None else None
+
+    @property
+    def weapon(self):
+        """Kind of the equipped weapon, or None for the blaster."""
+        slot = self.slot
+        return slot.kind if slot else None
+
+    @property
+    def ammo(self):
+        return self.slot.ammo if self.slot else 0
+
+    @ammo.setter
+    def ammo(self, value):
+        self.slot.ammo = value
+
+    @property
+    def weapon_time(self):
+        return self.slot.time if self.slot else 0.0
+
+    @weapon_time.setter
+    def weapon_time(self, value):
+        self.slot.time = value
+
+    def find(self, kind):
+        for i, slot in enumerate(self.inventory):
+            if slot.kind == kind:
+                return i
+        return None
+
+    def remove_slot(self, index):
+        """Remove a slot and keep `selected` pointing at the same weapon."""
+        slot = self.inventory.pop(index)
+        if self.selected is not None:
+            if self.selected == index:
+                self.selected = None
+            elif self.selected > index:
+                self.selected -= 1
+        return slot
 
 
 class Shot(Body):

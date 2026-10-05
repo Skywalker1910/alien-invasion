@@ -124,3 +124,103 @@ def test_title_waits_for_player():
     for _ in range(10):
         app.frame(1 / 60)
     assert app.game.state == TITLE
+
+
+def press(app, key):
+    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=key))
+    app.frame(1 / 60)
+    pygame.event.post(pygame.event.Event(pygame.KEYUP, key=key))
+    app.frame(1 / 60)
+
+
+def test_main_menu_help_pages_and_back():
+    from invasion.menu import HELP, HELP_PAGES, MAIN
+    app = App(seed=3)
+    app.frame(1 / 60)
+    assert app.menu.screen == MAIN
+    press(app, pygame.K_DOWN)
+    press(app, pygame.K_RETURN)                   # "Help"
+    assert app.menu.screen == HELP and app.menu.page == 0
+    for _ in range(len(HELP_PAGES)):
+        press(app, pygame.K_RIGHT)                # every page draws without errors
+    assert app.menu.page == 0
+    press(app, pygame.K_LEFT)
+    assert app.menu.page == len(HELP_PAGES) - 1
+    press(app, pygame.K_ESCAPE)
+    assert app.menu.screen == MAIN and app.game.state == TITLE
+
+
+def test_menu_buttons_are_clickable():
+    from invasion.menu import HELP
+    app = App(seed=3)
+    app.frame(1 / 60)
+    rect = dict((a, r) for r, a in app.menu.hitboxes)["help"]
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=rect.center))
+    app.frame(1 / 60)
+    assert app.menu.screen == HELP
+    tab = dict((a, r) for r, a in app.menu.hitboxes)["page:3"]
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=tab.center))
+    app.frame(1 / 60)
+    assert app.menu.page == 3
+
+
+def test_pause_menu_restart_and_main_menu():
+    from invasion.menu import MAIN, PAUSE
+    app = App(seed=3)
+    bridge = RecordingBridge()
+    app.bridge = bridge
+    press(app, pygame.K_RETURN)                   # Play
+    first = app.game.run_id
+    press(app, pygame.K_ESCAPE)
+    assert app.game.paused and app.menu.screen == PAUSE
+    press(app, pygame.K_DOWN)
+    press(app, pygame.K_DOWN)
+    press(app, pygame.K_RETURN)                   # "Restart run"
+    assert app.game.state == PLAYING and not app.game.paused and app.game.run_id != first
+    press(app, pygame.K_p)
+    for _ in range(3):
+        press(app, pygame.K_DOWN)
+    press(app, pygame.K_RETURN)                   # "Main menu"
+    assert app.game.state == TITLE and app.menu.screen == MAIN
+    types = [e["type"] for e in bridge.sent]
+    assert types.count("run_abandoned") == 2 and "game_over" not in types
+
+
+def test_inventory_keys_and_mouse_wheel():
+    from invasion.entities import Pickup
+    app = App(seed=3)
+    press(app, pygame.K_RETURN)
+    game = app.game
+    for kind in ("rail", "plasma"):
+        game._collect(Pickup(kind, "weapon", 0, 0, 0))
+    game._collect(Pickup("overdrive", "utility", 0, 0, 0))
+    press(app, pygame.K_e)
+    assert game.ship.weapon == "plasma"
+    press(app, pygame.K_1)
+    assert game.ship.weapon == "rail"
+    pygame.event.post(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+    app.frame(1 / 60)
+    assert game.ship.weapon == "plasma"
+    press(app, pygame.K_f)
+    assert "overdrive" in game.ship.buffs
+
+
+def test_host_inventory_commands():
+    from invasion.entities import Pickup
+    app = App(seed=3)
+    bridge = RecordingBridge([{"type": "start"}])
+    app.bridge = bridge
+    app.frame(1 / 60)
+    game = app.game
+    for kind in ("rail", "plasma"):
+        game._collect(Pickup(kind, "weapon", 0, 0, 0))
+    game._collect(Pickup("magnet", "utility", 0, 0, 0))
+    bridge.commands = [{"type": "switch", "direction": 1}]
+    app.frame(1 / 60)
+    assert game.ship.weapon == "plasma"
+    bridge.commands = [{"type": "select", "slot": 0}]
+    app.frame(1 / 60)
+    assert game.ship.weapon == "rail"
+    bridge.commands = [{"type": "activate"}]
+    app.frame(1 / 60)
+    assert "magnet" in game.ship.buffs

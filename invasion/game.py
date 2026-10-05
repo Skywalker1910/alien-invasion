@@ -11,14 +11,23 @@ Damage rules:
     seconds, so one collision or one burst can never chain into a wipe.
   * hull at 0 costs a ship. 3 ships = 3 hull bars. After respawning the
     ship blinks and is invulnerable for invulnerable_time.
-  * losing a ship clears the weapon, buffs, shield and armor. The
-    shockwave keeps its charge.
+  * losing a ship loses the equipped weapon, active upgrades, shield and
+    armor. The rest of the inventory and the shockwave charge are kept.
 
-Pickup rules:
-  * weapons: one at a time, replace the current one, picking up the same
-    weapon refills it; limited by ammo or time, then back to the blaster.
-  * repair / armor / shield stack up to their caps. Wingmen, overdrive and
-    magnet are timed; picking one up again refreshes it to full.
+Inventory rules (up to PlayerConfig.inventory_slots slots):
+  * weapons and timed upgrades (wingmen, overdrive, magnet) are stored.
+    Picking up something you already hold refills that slot instead.
+  * a new weapon is equipped automatically only if you are on the blaster;
+    otherwise it waits in its slot. Switch any time (cycle or by slot).
+  * ammo weapons keep their shot count; timed weapons only use up time
+    while equipped (the laser only while firing). An empty weapon leaves
+    the inventory and the next weapon is equipped.
+  * stored upgrades do nothing until activated; then their timer runs.
+    Activating one that is already running refreshes it to full.
+  * when the inventory is full, a new kind replaces the emptiest slot
+    (never the equipped weapon).
+  * repair / armor / shield / shock charge / extra ship apply instantly
+    and stack up to their caps.
   * pickups fall and are lost if they leave the bottom of the screen.
   * a new run starts with nothing but the blaster and a charged shockwave.
 """
@@ -28,10 +37,10 @@ from dataclasses import dataclass, replace
 
 from . import ai, weapons
 from .config import Config
-from .entities import Boss, Enemy, EnemyShot, Hardpoint, Pickup, Ship, Shockwave, Shot
+from .entities import Boss, Enemy, EnemyShot, Hardpoint, Pickup, Ship, Shockwave, Shot, Slot
 from .levels import Spawn, build_wave, level_spec
 
-GAME_VERSION = "3.0.0"
+GAME_VERSION = "3.1.0"
 
 TITLE = "title"
 PLAYING = "playing"
@@ -45,7 +54,11 @@ class InputState:
     up: bool = False
     down: bool = False
     fire: bool = False
-    special: bool = False      # edge-triggered: true for one step only
+    # Edge-triggered: applied to one step only.
+    special: bool = False      # shockwave
+    switch: int = 0            # -1 / +1: previous / next weapon
+    select: int = -1           # inventory slot to equip or activate (0-based)
+    activate: bool = False     # activate the oldest stored upgrade
 
 
 class Game:
@@ -78,6 +91,15 @@ class Game:
             self.start_run(seed)
             return True
         return False
+
+    def abandon_run(self):
+        """Leave a run from the menu. Sends run_abandoned instead of game_over,
+        so the host never treats it as a finished (scoreable) run."""
+        if self.state == PLAYING:
+            self.high_score = max(self.high_score, self.score)
+            self.emit("run_abandoned", run_id=self.run_id, score=self.score, level=self.level)
+        self.state = TITLE
+        self.paused = False
 
     def _reset_run(self, seed):
         cfg = self.cfg
@@ -149,15 +171,16 @@ class Game:
     def advance(self, frame_dt, inp):
         """Feed real elapsed time; runs as many fixed steps as it covers.
 
-        Returns the number of steps run. Edge-triggered input (special) is
-        only applied to the first step, so callers should clear it when
-        this returns more than zero.
+        Returns the number of steps run. Edge-triggered input (special,
+        switch, select, activate) is only applied to the first step, so
+        callers should clear it when this returns more than zero.
         """
         self._accumulator += min(frame_dt, 0.25)
         steps = 0
         limit = self.cfg.display.max_steps_per_frame
         while self._accumulator >= self.dt - 1e-9 and steps < limit:
-            self.step(inp if steps == 0 else replace(inp, special=False))
+            self.step(inp if steps == 0 else
+                      replace(inp, special=False, switch=0, select=-1, activate=False))
             self._accumulator -= self.dt
             steps += 1
         if steps == limit:
@@ -324,6 +347,12 @@ class Game:
         ship.invulnerable_timer = max(0.0, ship.invulnerable_timer - dt)
         ship.hurt_timer = max(0.0, ship.hurt_timer - dt)
         ship.move(int(inp.right) - int(inp.left), int(inp.down) - int(inp.up), dt)
+        if inp.switch:
+            self.cycle_weapon(inp.switch)
+        if inp.select >= 0:
+            self.select_slot(inp.select)
+        if inp.activate:
+            self.activate_next_upgrade()
 
         for name in list(ship.buffs):
             ship.buffs[name] -= dt
@@ -351,13 +380,86 @@ class Game:
             self._use_shockwave()
 
     def weapon_empty(self):
+        """The equipped weapon ran out: drop it and equip the next one."""
         ship = self.ship
-        if ship.weapon:
-            self.emit("weapon_empty", weapon=ship.weapon)
-        ship.weapon = None
-        ship.ammo = 0
-        ship.weapon_time = 0.0
+        index = ship.selected
+        if index is None:
+            return
+        slot = ship.remove_slot(index)
         ship.laser_on = False
+        self.emit("weapon_empty", weapon=slot.kind)
+        weapons_left = [i for i, s in enumerate(ship.inventory) if s.category == "weapon"]
+        if weapons_left:
+            after = [i for i in weapons_left if i >= index]
+            ship.selected = after[0] if after else weapons_left[0]
+            self.emit("weapon_switched", weapon=ship.weapon, slot=ship.selected)
+
+    # ------------------------------------------------------------------
+    # Inventory
+    # ------------------------------------------------------------------
+    def cycle_weapon(self, direction):
+        """Step through blaster + stored weapons (upgrades are skipped)."""
+        ship = self.ship
+        options = [None] + [i for i, s in enumerate(ship.inventory) if s.category == "weapon"]
+        current = options.index(ship.selected) if ship.selected in options else 0
+        new = options[(current + (1 if direction > 0 else -1)) % len(options)]
+        if new != ship.selected:
+            ship.selected = new
+            ship.laser_on = False
+            self.emit("weapon_switched", weapon=ship.weapon or "blaster", slot=new)
+
+    def select_slot(self, index):
+        """Number keys: equip a weapon slot or activate an upgrade slot."""
+        ship = self.ship
+        if not 0 <= index < len(ship.inventory):
+            return
+        slot = ship.inventory[index]
+        if slot.category == "upgrade":
+            self._activate(index)
+        elif ship.selected != index:
+            ship.selected = index
+            ship.laser_on = False
+            self.emit("weapon_switched", weapon=slot.kind, slot=index)
+
+    def activate_next_upgrade(self):
+        for i, slot in enumerate(self.ship.inventory):
+            if slot.category == "upgrade":
+                self._activate(i)
+                return
+
+    def _activate(self, index):
+        slot = self.ship.remove_slot(index)
+        self.ship.buffs[slot.kind] = self.cfg.pickups[slot.kind].duration
+        self.emit("upgrade_activated", kind=slot.kind)
+
+    def _store(self, kind, category):
+        """Put a weapon or timed upgrade into the inventory."""
+        ship, cfg = self.ship, self.cfg
+        spec = cfg.weapons[kind] if category == "weapon" else cfg.pickups[kind]
+        ammo = getattr(spec, "ammo", 0)
+        index = ship.find(kind)
+        if index is not None:
+            slot = ship.inventory[index]
+            slot.ammo, slot.time = ammo, spec.duration
+            return "refilled"
+        result = "stored"
+        if len(ship.inventory) >= cfg.player.inventory_slots:
+            candidates = [i for i in range(len(ship.inventory)) if i != ship.selected]
+            index = min(candidates, key=lambda i: self._slot_fill(ship.inventory[i]))
+            old = ship.remove_slot(index)
+            self.emit("inventory_replaced", kind=old.kind, new=kind)
+            result = "replaced"
+        ship.inventory.append(Slot(kind, category, ammo, spec.duration))
+        if category == "weapon" and ship.selected is None:
+            ship.selected = len(ship.inventory) - 1
+            result = "equipped"
+        return result
+
+    def _slot_fill(self, slot):
+        if slot.category == "upgrade":
+            return 1.0
+        spec = self.cfg.weapons[slot.kind]
+        return slot.ammo / spec.ammo if spec.ammo else slot.time / spec.duration
 
     def _use_shockwave(self):
         if self.shock_charge < 1.0 or not self.ship.alive:
@@ -395,7 +497,13 @@ class Game:
         ship = self.ship
         ship.alive = False
         ship.hull = 0.0
-        ship.reset_loadout()
+        lost = None
+        if ship.selected is not None:
+            lost = ship.remove_slot(ship.selected).kind
+        ship.buffs.clear()
+        ship.shield = 0
+        ship.armor = 0.0
+        ship.laser_on = False
         self.lives -= 1
         self.enemy_shots.clear()
         for enemy in self.enemies:
@@ -409,7 +517,8 @@ class Game:
                 part.burst_left = 0
                 part.beam_state = None
                 part.fire_timer = max(part.fire_timer, 1.5)
-        self.emit("player_destroyed", x=ship.x, y=ship.y, lives=self.lives, cause=cause)
+        self.emit("player_destroyed", x=ship.x, y=ship.y, lives=self.lives, cause=cause,
+                  lost_weapon=lost)
         if self.lives <= 0:
             self.game_over_timer = self.cfg.player.game_over_delay
         else:
@@ -667,12 +776,13 @@ class Game:
         cfg, ship = self.cfg, self.ship
         pc, kind = cfg.player, pickup.kind
         bonus = 0
+        result = None
         if pickup.category == "weapon":
-            spec = cfg.weapons[kind]
-            ship.weapon = kind
-            ship.ammo = spec.ammo
-            ship.weapon_time = spec.duration
-            label = spec.label
+            label = cfg.weapons[kind].label
+            result = self._store(kind, "weapon")
+        elif cfg.pickups[kind].storable:
+            label = cfg.pickups[kind].label
+            result = self._store(kind, "upgrade")
         else:
             spec = cfg.pickups[kind]
             label = spec.label
@@ -691,11 +801,9 @@ class Game:
                     self.lives += 1
                 else:
                     bonus = cfg.drops.bonus_points * 4
-            else:
-                ship.buffs[kind] = spec.duration
         self.score += bonus
         self.emit("pickup", kind=kind, category=pickup.category, label=label, x=pickup.x,
-                  y=pickup.y, bonus=bonus)
+                  y=pickup.y, bonus=bonus, result=result)
 
     # ------------------------------------------------------------------
     # Projectiles and shockwaves
@@ -903,6 +1011,10 @@ class Game:
             left, total = boss.stage_hp()
             boss_info = {"name": boss.label, "stage": boss.stage, "stages": boss.stages,
                          "stage_hp": round(left / total, 3) if total else 0}
+        inventory = [{"kind": s.kind, "category": s.category,
+                      "ammo": s.ammo if s.category == "weapon" and self.cfg.weapons[s.kind].ammo else None,
+                      "time": round(s.time, 1) if s.time else None}
+                     for s in ship.inventory]
         return {
             "state": self.state,
             "paused": self.paused,
@@ -915,6 +1027,8 @@ class Game:
             "armor": round(ship.armor),
             "shield": ship.shield,
             "weapon": weapon,
+            "inventory": inventory,
+            "selected": ship.selected,
             "buffs": {k: round(v, 1) for k, v in sorted(ship.buffs.items())},
             "shock": round(self.shock_charge, 2),
             "multiplier": self.multiplier,

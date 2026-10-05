@@ -11,8 +11,10 @@ import pygame
 
 from .config import CYAN, GOLD, GREEN, ORANGE, PINK, RED, STEEL, VIOLET, WHITE, YELLOW
 from .entities import PART_SIZES
+from . import codex
 from .game import GAME_OVER, PLAYING, TITLE
 from .levels import THEMES
+from .menu import HELP, HELP_PAGES, MAIN, PAUSE
 
 ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
@@ -250,7 +252,25 @@ class Renderer:
                 color = self._pickup_color(ev["kind"])
                 self.burst(x, y, color, 20, 220, 3, 0.5)
                 label = ev["label"].upper() + ("!" if not ev.get("bonus") else f" +{ev['bonus']}")
+                result = ev.get("result")
+                if result == "stored":
+                    label = f"{ev['label'].upper()} STORED"
+                elif result == "refilled":
+                    label = f"{ev['label'].upper()} REFILLED"
                 self.float_text(label, x, y - 34, color, 30, 1.1)
+            elif kind == "weapon_switched":
+                name = ev["weapon"]
+                label = cfg.weapons[name].label if name in cfg.weapons else "Blaster"
+                color = cfg.weapons[name].color if name in cfg.weapons else TEXT
+                self.float_text(label, game.ship.x, game.ship.y - 46, color, 24, 0.7)
+            elif kind == "upgrade_activated":
+                spec = cfg.pickups[ev["kind"]]
+                self.burst(game.ship.x, game.ship.y, spec.color, 24, 240, 3, 0.5)
+                self.float_text(f"{spec.label.upper()} ON!", game.ship.x, game.ship.y - 50, spec.color, 30, 1.0)
+            elif kind == "inventory_replaced":
+                old = ev["kind"]
+                name = cfg.weapons[old].label if old in cfg.weapons else cfg.pickups[old].label
+                self.float_text(f"Inventory full: {name} dropped", self.width / 2, self.height - 90, DIM, 22, 1.4)
             elif kind == "pickup_missed":
                 self.float_text("missed", game.ship.x, self.height - 70, DIM, 18, 0.6)
             elif kind == "weapon_empty":
@@ -305,7 +325,8 @@ class Renderer:
     # ------------------------------------------------------------------
     # Frame
     # ------------------------------------------------------------------
-    def draw(self, target, game, frame_dt):
+    def draw(self, target, game, frame_dt, menu=None):
+        screen = menu.screen if menu else None
         if not game.paused:
             self.time += frame_dt
             self._update_fx(frame_dt)
@@ -327,13 +348,20 @@ class Renderer:
             target.blit(self.overlay, (0, 0))
 
         if game.state == TITLE:
-            self._draw_title(target, game)
+            self._draw_main_menu(target, game, menu)
+            if screen == HELP:
+                self._draw_help(target, menu)
             return
         self._draw_low_hull(target, game)
         self._draw_hud(target, game)
         self._draw_banner(target, game)
-        if game.paused:
-            self._draw_pause(target)
+        if screen == PAUSE:
+            self._draw_pause_menu(target, menu)
+        elif screen == HELP:
+            self._draw_help(target, menu)
+        elif game.paused:
+            self._dim(target)
+            self.blit_text(target, "PAUSED", 80, TEXT, center=(self.width // 2, self.height // 2))
         elif game.state == GAME_OVER:
             self._draw_game_over(target, game)
 
@@ -692,70 +720,91 @@ class Renderer:
                            shadow=True, midright=(x0 - 10, y0 + 5))
             self._bar(surf, x0, y0, w, 10, left / total if total else 0, RED, (50, 15, 25))
 
-        # Bottom bar
-        bar_y = height - pc.bottom_margin + 6
-        surf.fill(PANEL, (0, bar_y - 6, width, pc.bottom_margin))
-        pygame.draw.line(surf, PANEL_EDGE, (0, bar_y - 6), (width, bar_y - 6))
+        # Bottom bar: status (left), inventory (middle), weapon / shock / buffs (right)
+        top = height - pc.bottom_margin
+        surf.fill(PANEL, (0, top, width, pc.bottom_margin))
+        pygame.draw.line(surf, PANEL_EDGE, (0, top), (width, top))
         ship = game.ship
+        y = top + 7
 
-        # Hull + armor
         hull_frac = max(0.0, ship.hull) / pc.max_hull
         hull_color = GREEN if hull_frac > 0.5 else (YELLOW if hull_frac > 0.25 else RED)
-        self.blit_text(surf, "HULL", 18, DIM, topleft=(12, bar_y))
-        self._bar(surf, 50, bar_y + 1, 170, 12, hull_frac, hull_color)
-        self.blit_text(surf, f"{max(0, round(ship.hull))}", 18, TEXT, midleft=(226, bar_y + 7))
-        self.blit_text(surf, "ARMR", 18, DIM, topleft=(12, bar_y + 18))
-        self._bar(surf, 50, bar_y + 19, 170, 8, ship.armor / pc.max_armor, STEEL)
-        # Shield charges
-        x = 262
-        self.blit_text(surf, "SHLD", 18, DIM, topleft=(x, bar_y))
+        self.blit_text(surf, "HULL", 17, DIM, topleft=(10, y))
+        self._bar(surf, 48, y + 1, 150, 10, hull_frac, hull_color)
+        self.blit_text(surf, f"{max(0, round(ship.hull))}", 17, TEXT, midleft=(204, y + 6))
+        self.blit_text(surf, "ARMR", 17, DIM, topleft=(10, y + 15))
+        self._bar(surf, 48, y + 16, 150, 6, ship.armor / pc.max_armor, STEEL)
+        self.blit_text(surf, "SHLD", 17, DIM, topleft=(10, y + 30))
         for i in range(pc.max_shield):
-            cx = x + 6 + i * 11
             color = CYAN if i < ship.shield else (40, 50, 80)
-            pygame.draw.circle(surf, color, (cx, bar_y + 24), 4)
-        # Lives
-        self.blit_text(surf, "SHIPS", 18, DIM, topleft=(x + 118, bar_y))
+            pygame.draw.circle(surf, color, (52 + i * 10, y + 36), 4)
         for i in range(game.lives):
-            surf.blit(self.life_icon, (x + 118 + i * 18, bar_y + 14))
+            surf.blit(self.life_icon, (160 + i * 18, y + 26))
 
-        # Weapon
-        wx = 500
+        self._draw_inventory(surf, game, 262, top + 5)
+
+        # Equipped weapon
+        rx = 664
         if ship.weapon:
             spec = cfg.weapons[ship.weapon]
-            icon = self.icons[ship.weapon]
-            surf.blit(icon, icon.get_rect(midleft=(wx, bar_y + 14)))
-            self.blit_text(surf, spec.label.upper(), 20, spec.color, topleft=(wx + 28, bar_y))
+            surf.blit(self.icons[ship.weapon], (rx, y - 3))
+            self.blit_text(surf, spec.label.upper(), 18, spec.color, topleft=(rx + 26, y))
             if spec.ammo:
                 frac, label = ship.ammo / spec.ammo, f"{ship.ammo}"
             else:
                 frac, label = ship.weapon_time / spec.duration, f"{ship.weapon_time:0.1f}s"
-            self._bar(surf, wx + 28, bar_y + 18, 110, 8, frac, spec.color)
-            self.blit_text(surf, label, 18, TEXT, midleft=(wx + 144, bar_y + 22))
+            self._bar(surf, rx + 26, y + 17, 90, 6, frac, spec.color)
+            self.blit_text(surf, label, 17, TEXT, midleft=(rx + 120, y + 20))
         else:
-            self.blit_text(surf, "BLASTER", 20, DIM, topleft=(wx + 28, bar_y))
-            self.blit_text(surf, "unlimited", 16, DIM, topleft=(wx + 28, bar_y + 18))
+            self.blit_text(surf, "BLASTER", 18, DIM, topleft=(rx + 26, y))
+            self.blit_text(surf, "unlimited", 15, DIM, topleft=(rx + 26, y + 16))
 
-        # Shockwave
-        sx = 690
-        ready = game.shock_charge >= 1.0
-        color = CYAN if ready else (80, 110, 160)
-        self.blit_text(surf, "SHOCK [SHIFT]" if ready else "SHOCK", 18, color, topleft=(sx, bar_y))
-        self._bar(surf, sx, bar_y + 18, 90, 8, game.shock_charge, color)
-        if ready and int(self.time * 3) % 2 == 0:
-            pygame.draw.rect(surf, CYAN, (sx - 3, bar_y + 15, 96, 14), 1)
-
-        # Buffs
-        bx = 800
+        # Active upgrades
+        bx = rx
         for kind in ("wingmen", "overdrive", "magnet"):
             left = ship.buffs.get(kind)
             if left is None:
                 continue
             spec = cfg.pickups[kind]
-            icon = self.icons[kind]
-            surf.blit(icon, (bx, bar_y))
-            self._bar(surf, bx, bar_y + 26, 22, 4, left / spec.duration, spec.color)
-            self.blit_text(surf, f"{left:0.0f}", 16, spec.color, topleft=(bx + 24, bar_y + 4))
+            icon = pygame.transform.smoothscale(self.icons[kind], (16, 16))
+            surf.blit(icon, (bx, y + 28))
+            self.blit_text(surf, f"{left:0.0f}s", 16, spec.color, topleft=(bx + 18, y + 29))
             bx += 50
+
+        # Shockwave
+        sx = 820
+        ready = game.shock_charge >= 1.0
+        color = CYAN if ready else (80, 110, 160)
+        self.blit_text(surf, "SHOCKWAVE", 17, color, topleft=(sx, y))
+        self._bar(surf, sx, y + 17, 126, 6, game.shock_charge, color)
+        if ready:
+            on = int(self.time * 3) % 2 == 0
+            self.blit_text(surf, "READY  [SHIFT]", 16, CYAN if on else DIM, topleft=(sx, y + 29))
+
+    def _draw_inventory(self, surf, game, x0, y0):
+        cfg = self.cfg
+        ship = game.ship
+        for i in range(cfg.player.inventory_slots):
+            rect = pygame.Rect(x0 + i * 39, y0, 36, 46)
+            slot = ship.inventory[i] if i < len(ship.inventory) else None
+            selected = slot is not None and i == ship.selected
+            surf.fill((20, 24, 50) if slot else (14, 17, 36), rect)
+            if slot:
+                color = self._pickup_color(slot.kind)
+                if slot.category == "weapon":
+                    spec = cfg.weapons[slot.kind]
+                    frac = slot.ammo / spec.ammo if spec.ammo else slot.time / spec.duration
+                else:
+                    frac = 1.0
+                    pygame.draw.circle(surf, tuple(c // 2 for c in color), (rect.centerx, rect.y + 20), 14, 1)
+                surf.blit(self.icons[slot.kind], self.icons[slot.kind].get_rect(center=(rect.centerx, rect.y + 20)))
+                surf.fill((40, 44, 70), (rect.x + 4, rect.bottom - 7, 28, 4))
+                surf.fill(color, (rect.x + 4, rect.bottom - 7, int(28 * max(0.0, min(1.0, frac))), 4))
+            border = YELLOW if selected else (self._pickup_color(slot.kind) if slot else PANEL_EDGE)
+            if slot and not selected:
+                border = tuple(c // 2 for c in border)
+            pygame.draw.rect(surf, border, rect, 2 if selected else 1, border_radius=4)
+            self.blit_text(surf, str((i + 1) % 10), 14, YELLOW if selected else DIM, topleft=(rect.x + 3, rect.y + 1))
 
     def _draw_banner(self, surf, game):
         cx, cy = self.width // 2, self.height // 2 - 60
@@ -773,11 +822,58 @@ class Renderer:
         self.overlay.fill((0, 0, 10, alpha))
         surf.blit(self.overlay, (0, 0))
 
-    def _draw_pause(self, surf):
-        self._dim(surf)
-        cx, cy = self.width // 2, self.height // 2
-        self.blit_text(surf, "PAUSED", 80, TEXT, center=(cx, cy - 30))
-        self.blit_text(surf, "Press P or Esc to resume", 30, DIM, center=(cx, cy + 30))
+    def wrap(self, text, size, width):
+        font = self.font(size)
+        lines, current = [], ""
+        for word in text.split():
+            trial = f"{current} {word}".strip()
+            if font.size(trial)[0] <= width:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines
+
+    # ------------------------------------------------------------------
+    # Menus
+    # ------------------------------------------------------------------
+    def _menu_buttons(self, surf, menu, cx, y0):
+        menu.hitboxes = []
+        for i, (label, action) in enumerate(menu.items()):
+            rect = pygame.Rect(0, 0, 280, 46)
+            rect.center = (cx, y0 + i * 56)
+            selected = i == menu.index
+            pygame.draw.rect(surf, (34, 44, 90) if selected else (16, 20, 42), rect, border_radius=10)
+            pygame.draw.rect(surf, YELLOW if selected else PANEL_EDGE, rect, 2, border_radius=10)
+            self.blit_text(surf, label, 32, YELLOW if selected else TEXT, center=rect.center)
+            menu.hitboxes.append((rect, action))
+
+    def _draw_main_menu(self, surf, game, menu):
+        cx = self.width // 2
+        self.blit_text(surf, "ALIEN INVASION", 100, (120, 255, 160), shadow=True, center=(cx, 90))
+        kinds = ["drone", "wasp", "striker", "lancer", "guardian", "dreadnought"]
+        for i, kind in enumerate(kinds):
+            x = cx - 140 * 2.5 + i * 140
+            img = self.enemy_imgs[kind][0]
+            surf.blit(img, img.get_rect(center=(x, 190 + 4 * math.sin(self.time * 2 + i))))
+        if menu is None:
+            self.blit_text(surf, "Press Enter to start", 34, TEXT, center=(cx, 360))
+            return
+        if menu.screen == MAIN:
+            self._menu_buttons(surf, menu, cx, 300)
+        self.blit_text(surf, "Up / Down to choose   ·   Enter to select   ·   H for help", 22, DIM,
+                       center=(cx, 560))
+        if game.high_score:
+            self.blit_text(surf, f"High score {game.high_score:,}", 26, YELLOW, center=(cx, 595))
+
+    def _draw_pause_menu(self, surf, menu):
+        self._dim(surf, 170)
+        cx = self.width // 2
+        self.blit_text(surf, "PAUSED", 80, TEXT, shadow=True, center=(cx, 130))
+        self._menu_buttons(surf, menu, cx, 220)
+        self.blit_text(surf, "P / Esc to resume", 22, DIM, center=(cx, 540))
 
     def _draw_game_over(self, surf, game):
         self._dim(surf, 175)
@@ -788,46 +884,147 @@ class Renderer:
                        28, DIM, center=(cx, cy + 24))
         if game.new_high_score:
             self.blit_text(surf, "NEW HIGH SCORE!", 34, YELLOW, center=(cx, cy + 64))
-        self.blit_text(surf, "Press R (or click) to play again", 32, TEXT, center=(cx, cy + 110))
+        self.blit_text(surf, "R (or click) to play again   ·   Esc for the main menu", 30, TEXT,
+                       center=(cx, cy + 110))
 
-    def _draw_title(self, surf, game):
-        cx = self.width // 2
-        self.blit_text(surf, "ALIEN INVASION", 100, (120, 255, 160), shadow=True, center=(cx, 90))
-        kinds = ["drone", "wasp", "striker", "lancer", "guardian", "dreadnought"]
-        spacing = 140
-        for i, kind in enumerate(kinds):
-            x = cx - spacing * 2.5 + i * spacing
-            img = self.enemy_imgs[kind][0]
-            bob = 4 * math.sin(self.time * 2 + i)
-            surf.blit(img, img.get_rect(center=(x, 185 + bob)))
+    # ------------------------------------------------------------------
+    # Help pages
+    # ------------------------------------------------------------------
+    def _draw_help(self, surf, menu):
+        self._dim(surf, 225)
+        menu.hitboxes = []
+        panel = pygame.Rect(30, 20, self.width - 60, self.height - 40)
+        pygame.draw.rect(surf, (12, 15, 34), panel, border_radius=14)
+        pygame.draw.rect(surf, PANEL_EDGE, panel, 2, border_radius=14)
+        self.blit_text(surf, "HELP", 40, YELLOW, topleft=(panel.x + 20, panel.y + 14))
+
+        tab_w = 118
+        x = panel.right - 20 - tab_w * len(HELP_PAGES)
+        for i, name in enumerate(HELP_PAGES):
+            rect = pygame.Rect(x + i * tab_w, panel.y + 14, tab_w - 6, 34)
+            active = i == menu.page
+            pygame.draw.rect(surf, (34, 44, 90) if active else (18, 22, 46), rect, border_radius=8)
+            pygame.draw.rect(surf, YELLOW if active else PANEL_EDGE, rect, 2 if active else 1, border_radius=8)
+            self.blit_text(surf, name, 22, YELLOW if active else TEXT, center=rect.center)
+            menu.hitboxes.append((rect, f"page:{i}"))
+
+        area = pygame.Rect(panel.x + 24, panel.y + 66, panel.w - 48, panel.h - 120)
+        page = HELP_PAGES[menu.page]
+        getattr(self, f"_help_{page.lower()}")(surf, area)
+
+        back = pygame.Rect(0, 0, 120, 34)
+        back.bottomright = (panel.right - 20, panel.bottom - 12)
+        pygame.draw.rect(surf, (18, 22, 46), back, border_radius=8)
+        pygame.draw.rect(surf, PANEL_EDGE, back, 1, border_radius=8)
+        self.blit_text(surf, "Back", 24, TEXT, center=back.center)
+        menu.hitboxes.append((back, "back"))
+        self.blit_text(surf, "Left / Right (or click a tab) to change page   ·   Esc to go back", 20, DIM,
+                       midleft=(panel.x + 24, back.centery))
+
+    def _help_basics(self, surf, area):
+        y = area.y + 6
+        for line in codex.BASICS:
+            pygame.draw.circle(surf, YELLOW, (area.x + 10, y + 11), 4)
+            for part in self.wrap(line, 26, area.w - 40):
+                self.blit_text(surf, part, 26, TEXT, topleft=(area.x + 28, y))
+                y += 26
+            y += 16
+
+    def _help_controls(self, surf, area):
+        y = area.y + 10
+        for keys, action in codex.CONTROLS:
+            self.blit_text(surf, keys, 28, YELLOW, topright=(area.x + 330, y))
+            self.blit_text(surf, action, 28, TEXT, topleft=(area.x + 360, y))
+            y += 44
+        self.blit_text(surf, "Touch / browser hosts can send the same actions through the page bridge.",
+                       20, DIM, topleft=(area.x + 20, y + 6))
+
+    def _help_enemies(self, surf, area):
+        y = area.y
+        row_h = area.h // len(codex.ENEMIES)
+        for kind, text in codex.ENEMIES.items():
             spec = self.cfg.enemies[kind]
-            self.blit_text(surf, spec.label, 22, ENEMY_COLORS[kind], center=(x, 238))
-            self.blit_text(surf, f"{spec.hp:g} HP", 18, DIM, center=(x, 256))
-        lines = [
-            "Move: Arrows / WASD     Shoot: Space (hold)     Shockwave: Shift     Pause: P / Esc",
-            "Shoot wrecks for capsules. Hexagons are weapons, circles are upgrades.",
-            "Bosses: hit the glowing weapons - the hull is armored.",
-        ]
-        for i, line in enumerate(lines):
-            self.blit_text(surf, line, 24, DIM, center=(cx, 300 + i * 28))
-        kinds = list(self.cfg.weapons) + list(self.cfg.pickups)
-        per_row = 8
-        for i, kind in enumerate(kinds):
-            row, col = divmod(i, per_row)
-            x = cx - 3.5 * 104 + col * 104
-            y = 410 + row * 54
-            icon = self.icons[kind]
+            img = self.enemy_imgs[kind][0]
+            scale = min(1.0, 44 / max(img.get_size()))
+            if scale < 1:
+                img = pygame.transform.smoothscale(img, (int(img.get_width() * scale), int(img.get_height() * scale)))
+            surf.blit(img, img.get_rect(center=(area.x + 30, y + row_h // 2)))
+            color = ENEMY_COLORS.get(kind, TEXT)
+            self.blit_text(surf, spec.label, 24, color, topleft=(area.x + 66, y + 4))
+            stats = "hazard" if spec.hazard else f"{spec.hp:g} HP  ·  {spec.points} pts"
+            self.blit_text(surf, stats, 18, DIM, topleft=(area.x + 66, y + 26))
+            ty = y + 6
+            for part in self.wrap(text, 21, area.w - 260)[:2]:
+                self.blit_text(surf, part, 21, TEXT, topleft=(area.x + 250, ty))
+                ty += 20
+            y += row_h
+
+    def _help_bosses(self, surf, area):
+        y = area.y
+        row_h = area.h // len(self.cfg.bosses)
+        for i, spec in enumerate(self.cfg.bosses):
+            img = self._boss_preview(i)
+            w = 250
+            h = int(img.get_height() * w / img.get_width())
+            surf.blit(pygame.transform.smoothscale(img, (w, h)), (area.x, y + (row_h - h) // 2))
+            level = self.cfg.boss.levels[i] if i < len(self.cfg.boss.levels) else "?"
+            self.blit_text(surf, f"{spec.label}  ·  level {level}", 28, RED, topleft=(area.x + 275, y + 8))
+            ty = y + 40
+            for line in codex.boss_stages(spec):
+                for part in self.wrap(line, 21, area.w - 290):
+                    self.blit_text(surf, part, 21, TEXT, topleft=(area.x + 275, ty))
+                    ty += 20
+            y += row_h
+        self.blit_text(surf, "Only the glowing weapons take damage. The hull is armored.", 20, DIM,
+                       bottomleft=(area.x, area.bottom + 8))
+
+    def _boss_preview(self, index):
+        """The boss hull with all of its weapons mounted (cached)."""
+        key = ("boss_preview", index)
+        surf = self._glows.get(key)
+        if surf is None:
+            surf = self.boss_imgs[index].copy()
+            cx, cy = surf.get_width() / 2, surf.get_height() / 2
+            for hp in self.cfg.bosses[index].hardpoints:
+                part = self.part_imgs[hp.kind][0]
+                surf.blit(part, part.get_rect(center=(cx + hp.offset[0], cy + hp.offset[1])))
+            self._glows[key] = surf
+        return surf
+
+    def _icon_badge(self, surf, kind, center, hexagon):
+        color = self._pickup_color(kind)
+        x, y = center
+        if hexagon:
+            pts = [(x + math.cos(a * math.tau / 6 + math.pi / 6) * 17, y + math.sin(a * math.tau / 6 + math.pi / 6) * 17)
+                   for a in range(6)]
+            pygame.draw.polygon(surf, color, pts, 2)
+        else:
+            pygame.draw.circle(surf, color, center, 17, 2)
+        surf.blit(self.icons[kind], self.icons[kind].get_rect(center=center))
+
+    def _help_list(self, surf, area, rows, hexagon):
+        y = area.y
+        row_h = area.h // len(rows)
+        for kind, label, detail, text in rows:
             color = self._pickup_color(kind)
-            if row == 0:
-                pts = [(x + math.cos(a * math.tau / 6 + math.pi / 6) * 15, y + math.sin(a * math.tau / 6 + math.pi / 6) * 15)
-                       for a in range(6)]
-                pygame.draw.polygon(surf, color, pts, 2)
-            else:
-                pygame.draw.circle(surf, color, (x, y), 15, 2)
-            surf.blit(icon, icon.get_rect(center=(x, y)))
-            label = self.cfg.weapons[kind].label if kind in self.cfg.weapons else self.cfg.pickups[kind].label
-            self.blit_text(surf, label, 17, color, center=(x, y + 24))
-        if int(self.time * 2) % 2 == 0:
-            self.blit_text(surf, "Press Space or Enter (or click) to start", 36, TEXT, center=(cx, 545))
-        if game.high_score:
-            self.blit_text(surf, f"High score {game.high_score:,}", 26, YELLOW, center=(cx, 590))
+            self._icon_badge(surf, kind, (area.x + 22, y + row_h // 2), hexagon)
+            self.blit_text(surf, label, 24, color, topleft=(area.x + 54, y + 6))
+            self.blit_text(surf, detail, 18, DIM, topleft=(area.x + 54, y + 28))
+            ty = y + 8
+            for part in self.wrap(text, 21, area.w - 290)[:2]:
+                self.blit_text(surf, part, 21, TEXT, topleft=(area.x + 280, ty))
+                ty += 20
+            y += row_h
+
+    def _help_weapons(self, surf, area):
+        rows = [(k, s.label, codex.weapon_limit(s), codex.WEAPONS[k]) for k, s in self.cfg.weapons.items()]
+        self._help_list(surf, area, rows, True)
+
+    def _help_upgrades(self, surf, area):
+        rows = []
+        for kind, spec in self.cfg.pickups.items():
+            detail = codex.upgrade_detail(kind, spec, self.cfg)
+            if spec.storable:
+                detail += "  ·  stored"
+            rows.append((kind, spec.label, detail, codex.UPGRADES[kind]))
+        self._help_list(surf, area, rows, False)

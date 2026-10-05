@@ -59,7 +59,7 @@ Every boss attack is telegraphed: turrets glow red before firing, and lasers dra
 
 Wrecks sometimes drop capsules that fall toward the bottom of the screen. Fly into them to collect them. **If you miss one, it's gone.** If you go about 8 seconds without a drop, your next kill always drops one.
 
-**Hexagon capsules are weapons.** You hold one weapon at a time. A new one replaces the old one, and the same one refills it. When the ammo or time runs out you're back to the basic blaster (unlimited).
+**Hexagon capsules are weapons.** They go into your inventory (see below). When a weapon's ammo or time runs out it leaves the inventory and your next weapon is equipped. With no weapons left you're back to the basic blaster, which never runs out.
 
 | Weapon | Limit | What it does |
 | --- | --- | --- |
@@ -76,16 +76,24 @@ Wrecks sometimes drop capsules that fall toward the bottom of the screen. Fly in
 
 | Upgrade | What it does |
 | --- | --- |
-| Repair | +35 hull (drops more often when your hull is low) |
+| Repair | +35 hull, applied straight away (drops more often when your hull is low) |
 | Shield | Blocks the next 6 hits completely (stacks up to 10) |
 | Armor | +50 armor that soaks damage before the hull (up to 100) |
 | Shock Charge | Instantly recharges your shockwave |
-| Wingmen | Two little drones fly with you and shoot for 15 s |
-| Overdrive | Double damage and faster fire for 8 s |
-| Magnet | Pulls nearby capsules to you for 14 s |
+| Wingmen | *Stored.* Two little drones fly with you and shoot for 15 s |
+| Overdrive | *Stored.* Double damage and faster fire for 8 s |
+| Magnet | *Stored.* Pulls nearby capsules to you for 14 s |
 | Extra Ship | One more ship (rare, up to 5) |
 
-Timed upgrades reset to full if you pick them up again. Losing a ship clears your weapon and upgrades, but the shockwave keeps its charge.
+### Inventory
+
+You can carry up to **10** weapons and stored upgrades. They show up as numbered slots in the middle of the bottom bar.
+
+- **Weapons:** switch whenever you like with **Q / E** (or the mouse wheel), or jump straight to a slot with **1–0**. Every weapon keeps its own ammo or time, and a timed weapon like Spread Shot only uses up its time while it's equipped.
+- **Stored upgrades** (Wingmen, Overdrive, Magnet) wait in their slot until you use them. Press the slot's number, or **F** to use the oldest one. Using one that's already running resets its timer to full.
+- **New pickups:** a new weapon is equipped automatically only if you're on the blaster. Otherwise it waits in its slot. Picking up something you already carry refills that slot.
+- **Full inventory:** a new kind of pickup replaces your emptiest slot. Your equipped weapon is never replaced.
+- **Losing a ship:** you lose the equipped weapon and any running upgrades. Everything else stays in your inventory.
 
 ### Controls
 
@@ -94,10 +102,15 @@ Timed upgrades reset to full if you pick them up again. Losing a ship clears you
 | Arrows or WASD | Fly (left/right across the screen, up/down in the lower half) |
 | Space (hold) | Shoot |
 | Shift | **Shockwave**: a ring that clears all enemy bullets and hits hard enough to kill a Guardian. Takes 16 s to recharge. |
-| P or Esc | Pause / resume |
-| R | Play again after game over |
-| Space / Enter / click | Start from the title screen |
-| Q | Quit (desktop only) |
+| Q / E or mouse wheel | Previous / next weapon |
+| 1 … 0 | Equip the weapon, or use the upgrade, in that inventory slot |
+| F | Use the next stored upgrade |
+| P or Esc | Pause menu (Resume, Help, Restart run, Main menu, Quit) |
+| R | Play again after game over (Esc goes to the main menu) |
+
+### Menus and help
+
+The game opens on a **main menu** (Play, Help, Quit). **Help** has six pages: Basics, Controls, Enemies, Bosses, Weapons and Upgrades. They cover every enemy, boss and power-up in the game. HP, ammo, durations and boss weapons are read straight from the config, so the help always matches the game. Use the arrow keys or click the tabs; Esc goes back. Help is also in the pause menu.
 
 ## How to run it
 
@@ -142,6 +155,8 @@ The tests check the important rules:
 - armor soaks damage before the hull, and shields block an exact number of hits
 - one burst can't chain damage, and 3 ships means 3 hull bars
 - every weapon actually damages things, and ammo, refills and time limits work
+- weapons can be switched with their ammo kept, upgrades stay stored until used, and a full inventory replaces the emptiest slot
+- the menus, help pages, pause menu, restart and main menu all work by keyboard and mouse
 - upgrades refresh and expire, missed capsules disappear, and the magnet and the drop guarantee work
 - the shockwave kills a Guardian and then recharges
 - bosses only take damage on their active weapons and always go through 3 stages
@@ -180,6 +195,8 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 | `invasion/entities.py` | Ship, enemies, boss, shots, capsules |
 | `invasion/render.py` | Drawing, effects, HUD and menus |
 | `invasion/controls.py` | Keyboard plus virtual (touch) input |
+| `invasion/menu.py` | Main menu, pause menu and help navigation |
+| `invasion/codex.py` | Help text for every enemy, boss and power-up |
 | `invasion/app.py` | The window and the main loop |
 | `invasion/bridge.py` | Talks to the web page in the browser build (does nothing on desktop) |
 | `assets/images/` | Sprites (generated by `tools/make_art.py`) |
@@ -193,7 +210,8 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 - ✅ The original game from my college days
 - ✅ Aliens shoot back (front row only, with a limit on bullets so it stays fair)
 - ✅ Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
-- ✅ **Big rework:** random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
+- ✅ Big rework: random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
+- ✅ **10-slot inventory** to switch weapons and save upgrades for later, plus a main menu, pause menu and in-game help
 
 ## Ideas for what's next
 

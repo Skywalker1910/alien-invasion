@@ -64,11 +64,12 @@ _JS_SHIM = r"""
 FORWARDED_EVENTS = {
     "run_started", "level_started", "wave_started", "level_cleared", "boss_spawned",
     "boss_stage", "boss_defeated", "player_destroyed", "pickup", "paused", "resumed",
-    "game_over",
+    "game_over", "run_abandoned", "weapon_switched", "upgrade_activated",
 }
 
 # Commands the host may send. Anything else is ignored.
-COMMANDS = {"pause", "resume", "input", "special", "start", "restart"}
+COMMANDS = {"pause", "resume", "input", "special", "switch", "select", "activate", "start",
+            "restart"}
 
 
 class NullBridge:
@@ -150,7 +151,8 @@ class StateReporter:
     (score, hull, ammo, timers) at most every min_interval seconds."""
 
     IMMEDIATE = ("state", "paused", "level", "wave", "lives", "run_id")
-    FIELDS = IMMEDIATE + ("score", "multiplier", "hull", "armor", "shield", "weapon", "buffs",
+    FIELDS = IMMEDIATE + ("score", "multiplier", "hull", "armor", "shield", "weapon", "inventory",
+                          "selected", "buffs",
                           "shock", "boss")
 
     def __init__(self, bridge, min_interval=0.25):

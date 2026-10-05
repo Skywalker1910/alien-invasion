@@ -69,14 +69,16 @@ ways:
 | --- | --- | --- |
 | `ready` | the game loaded and is showing the title screen | `version`, `width`, `height` |
 | `run_started` | a new run began | `run_id`, `seed`, `version` |
-| `state` | something on the HUD changed. Lives, level, wave, pause and game state go out at once; score, hull, ammo and timers at most every 0.25 s | `state` (`title` / `playing` / `game_over`), `paused`, `score`, `multiplier`, `level`, `wave`, `lives`, `hull`, `armor`, `shield` (hits left), `weapon` (`{name, ammo, time}` or `null`), `buffs` (`{kind: seconds_left}`), `shock` (0–1 charge), `boss` (`{name, stage, stages, stage_hp}` or `null`), `run_id` |
+| `state` | something on the HUD changed. Lives, level, wave, pause and game state go out at once; score, hull, ammo and timers at most every 0.25 s | `state` (`title` / `playing` / `game_over`), `paused`, `score`, `multiplier`, `level`, `wave`, `lives`, `hull`, `armor`, `shield` (hits left), `weapon` (`{name, ammo, time}` or `null`), `inventory` (list of `{kind, category, ammo, time}`), `selected` (index of the equipped slot or `null`), `buffs` (`{kind: seconds_left}`), `shock` (0–1 charge), `boss` (`{name, stage, stages, stage_hp}` or `null`), `run_id` |
 | `level_started` | a level (or boss level) begins | `level`, `name`, `boss`, `hint`, `theme` |
 | `wave_started` | a new wave of a normal level begins | `level`, `wave`, `waves` |
 | `level_cleared` | the level is done (all waves or the boss) | `level`, `bonus` |
 | `boss_spawned` / `boss_stage` / `boss_defeated` | boss fight starts / reaches stage 2 or 3 / ends | `name`, `stages` / `stage`, `stages` / `points`, `level` |
 | `player_destroyed` | the player lost a ship | `lives`, `cause` (`bullet`, `orb`, `bolt`, `missile`, `beam`, `ram`, `mine`) |
 | `pickup` | a capsule was collected | `kind`, `category` (`weapon` / `utility`), `label`, `bonus` |
+| `weapon_switched` / `upgrade_activated` | the player changed weapon / used a stored upgrade | `weapon`, `slot` / `kind` |
 | `paused` / `resumed` | pause state changed (keyboard, focus or host) | |
+| `run_abandoned` | the player left a run from the pause menu (Restart run / Main menu). Not a finished run: don't submit it. | `run_id`, `score`, `level` |
 | `game_over` | the run ended. **Sent exactly once per run.** | `run_id`, `seed`, `score`, `level`, `wave`, `kills`, `ticks`, `duration`, `version` |
 
 `run_id` is `"<seed>-<run number>"`. The simulation runs at a fixed 60 steps
@@ -94,11 +96,14 @@ with `window.AlienInvasionBridge.send({type, ...})` from inside the game page.
 
 | type | effect |
 | --- | --- |
-| `start` | start a run from the title or game-over screen. Optional integer `seed`. |
+| `start` | start a run from the main menu or game-over screen (closes the menu). Optional integer `seed`. |
 | `restart` | same as pressing R. Only works on the game-over screen. Optional `seed`. |
-| `pause` / `resume` | pause or resume a run in progress (e.g. on `visibilitychange`) |
+| `pause` / `resume` | pause (opens the pause menu) or resume a run in progress, e.g. on `visibilitychange` |
 | `input` | virtual buttons for touch controls: any of `left`, `right`, `up`, `down`, `fire` as booleans. Values you leave out keep their previous state. They are combined (OR) with the keyboard. |
 | `special` | fire the shockwave if it is charged (like pressing Shift) |
+| `switch` | previous / next weapon: `direction` -1 or 1 (like Q / E) |
+| `select` | equip the weapon or use the upgrade in inventory `slot` (0–9, like keys 1–0) |
+| `activate` | use the oldest stored upgrade (like F) |
 
 Unknown commands are ignored.
 

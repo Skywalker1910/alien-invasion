@@ -47,10 +47,11 @@ class PlayerConfig:
     hitbox_scale: float = 0.55         # forgiving hitbox, smaller than the sprite
     speed: float = 560.0
     top_zone: float = 0.52             # ship can fly up to this fraction of the screen
-    bottom_margin: int = 46            # room for the bottom HUD bar
+    bottom_margin: int = 58            # room for the bottom HUD bar
     max_hull: float = 100.0
     max_armor: float = 100.0
     max_shield: int = 10               # shield charges (each blocks one hit)
+    inventory_slots: int = 10          # stored weapons + timed upgrades
     start_lives: int = 3
     max_lives: int = 5
     hurt_iframes: float = 0.35         # after taking damage, ignore damage this long
@@ -124,6 +125,7 @@ class PickupSpec:
     weight: float                      # relative drop weight
     value: float = 0.0
     duration: float = 0.0
+    storable: bool = False             # goes into the inventory, activated by the player
 
 
 def default_pickups():
@@ -132,9 +134,9 @@ def default_pickups():
         "shield": PickupSpec("Shield", CYAN, 12, value=6),              # blocks 6 hits
         "armor": PickupSpec("Armor", STEEL, 10, value=50),             # +50 armor
         "shock": PickupSpec("Shock Charge", WHITE, 7),                  # recharge shockwave
-        "wingmen": PickupSpec("Wingmen", TEAL, 7, duration=15),
-        "overdrive": PickupSpec("Overdrive", PINK, 6, duration=8),      # x2 damage, faster fire
-        "magnet": PickupSpec("Magnet", GOLD, 6, duration=14),           # pulls pickups in
+        "wingmen": PickupSpec("Wingmen", TEAL, 7, duration=15, storable=True),
+        "overdrive": PickupSpec("Overdrive", PINK, 6, duration=8, storable=True),  # x2 dmg
+        "magnet": PickupSpec("Magnet", GOLD, 6, duration=14, storable=True),  # pulls pickups
         "life": PickupSpec("Extra Ship", GREEN, 2),
     }
 

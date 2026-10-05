@@ -63,6 +63,12 @@ def add_enemy(game, kind="guardian", x=None, y=200, hp=None):
     return enemy
 
 
+def activate(game, kind):
+    """Collect a storable upgrade and switch it on straight away."""
+    give(game, kind)
+    game.select_slot(game.ship.find(kind))
+
+
 def of_type(events, kind):
     return [e for e in events if e["type"] == kind]
 
@@ -127,13 +133,15 @@ def test_shield_blocks_a_number_of_hits():
 def test_losing_a_ship_resets_loadout_but_keeps_shockwave():
     game = new_game()
     pc = game.cfg.player
-    for kind in ("rail", "wingmen", "overdrive", "armor"):
+    for kind in ("rail", "armor"):
         give(game, kind)
+    activate(game, "overdrive")
     game.shock_charge = 0.6
     hit_ship(game, 500)
     assert game.lives == 2
     ship = game.ship
     assert ship.weapon is None and ship.buffs == {} and ship.armor == 0 and ship.shield == 0
+    assert ship.inventory == []
     run(game, pc.respawn_delay + 0.05)
     assert ship.alive and ship.hull == pc.max_hull
     assert 0 < ship.invulnerable_timer <= pc.invulnerable_time
@@ -170,12 +178,109 @@ def test_ammo_weapons_count_shots_refill_and_run_out():
     assert of_type(game.drain_events(), "weapon_empty")
 
 
-def test_new_weapon_replaces_the_old_one():
+def test_second_weapon_is_stored_and_can_be_switched_to():
     game = new_game()
     give(game, "rapid")
     give(game, "plasma")
+    ship = game.ship
+    assert ship.weapon == "rapid"                    # already armed: new one waits
+    assert [s.kind for s in ship.inventory] == ["rapid", "plasma"]
+    game.step(InputState(switch=1))
+    assert ship.weapon == "plasma"
+    assert ship.ammo == game.cfg.weapons["plasma"].ammo
+    game.step(InputState(switch=1))
+    assert ship.weapon is None                       # wraps round to the blaster
+    game.step(InputState(switch=-1))
+    assert ship.weapon == "plasma"
+    game.step(InputState(select=0))
+    assert ship.weapon == "rapid"
+
+
+def test_ammo_is_kept_per_slot_when_switching():
+    game = new_game()
+    give(game, "rail")
+    give(game, "homing")
+    for _ in range(5):
+        weapons.fire(game)
+    game.cycle_weapon(1)
+    weapons.fire(game)
+    game.cycle_weapon(-1)
+    assert game.ship.weapon == "rail"
+    assert game.ship.ammo == game.cfg.weapons["rail"].ammo - 5
+    assert game.ship.inventory[1].ammo == game.cfg.weapons["homing"].ammo - 1
+
+
+def test_timed_weapon_only_drains_while_equipped():
+    game = new_game()
+    give(game, "rapid")
+    give(game, "spread")
+    run(game, 5)
+    full = game.cfg.weapons["spread"].duration
+    assert game.ship.inventory[1].time == full
+    game.select_slot(1)
+    run(game, 2)
+    assert game.ship.weapon_time == pytest.approx(full - 2, abs=0.05)
+
+
+def test_empty_weapon_leaves_and_next_weapon_is_equipped():
+    game = new_game()
+    give(game, "rail")
+    give(game, "plasma")
+    game.drain_events()
+    for _ in range(game.cfg.weapons["rail"].ammo):
+        weapons.fire(game)
     assert game.ship.weapon == "plasma"
-    assert game.ship.ammo == game.cfg.weapons["plasma"].ammo
+    assert [s.kind for s in game.ship.inventory] == ["plasma"]
+    events = game.drain_events()
+    assert of_type(events, "weapon_empty") and of_type(events, "weapon_switched")
+
+
+def test_upgrades_are_stored_until_activated():
+    game = new_game()
+    give(game, "overdrive")
+    give(game, "magnet")
+    ship = game.ship
+    assert ship.buffs == {}
+    run(game, 3)
+    assert ship.inventory[0].time == game.cfg.pickups["overdrive"].duration
+    game.step(InputState(activate=True))             # F: oldest stored upgrade
+    assert "overdrive" in ship.buffs and [s.kind for s in ship.inventory] == ["magnet"]
+    game.step(InputState(select=0))                  # number key on an upgrade activates it
+    assert "magnet" in ship.buffs and ship.inventory == []
+    # Cycling weapons never touches upgrades.
+    give(game, "wingmen")
+    game.step(InputState(switch=1))
+    assert "wingmen" not in ship.buffs and ship.find("wingmen") == 0
+
+
+def test_full_inventory_replaces_the_emptiest_slot():
+    game = new_game()
+    cap = game.cfg.player.inventory_slots
+    kinds = list(game.cfg.weapons) + ["wingmen", "overdrive"]
+    for kind in kinds:
+        give(game, kind)
+    ship = game.ship
+    assert len(ship.inventory) == cap
+    ship.selected = 0                                # spread equipped, protected
+    ship.inventory[2].ammo = 1                       # railgun nearly empty
+    game.drain_events()
+    give(game, "magnet")
+    assert len(ship.inventory) == cap
+    assert ship.find("rail") is None and ship.find("magnet") is not None
+    assert ship.weapon == "spread"
+    assert of_type(game.drain_events(), "inventory_replaced")[0]["kind"] == "rail"
+
+
+def test_losing_a_ship_keeps_the_rest_of_the_inventory():
+    game = new_game()
+    give(game, "rail")
+    give(game, "laser")
+    give(game, "overdrive")
+    activate(game, "wingmen")
+    hit_ship(game, 500)
+    ship = game.ship
+    assert [s.kind for s in ship.inventory] == ["laser", "overdrive"]
+    assert ship.weapon is None and ship.buffs == {}
 
 
 def test_timed_weapon_expires():
@@ -200,9 +305,9 @@ def test_laser_only_drains_while_firing():
 # ----------------------------------------------------------------------
 def test_buffs_refresh_and_expire():
     game = new_game()
-    give(game, "wingmen")
+    activate(game, "wingmen")
     run(game, 10)
-    give(game, "wingmen")
+    activate(game, "wingmen")
     assert game.ship.buffs["wingmen"] == game.cfg.pickups["wingmen"].duration
     game.drain_events()
     run(game, game.cfg.pickups["wingmen"].duration + 0.05)
@@ -219,7 +324,7 @@ def test_overdrive_doubles_damage():
     normal = 100 - a.hp
     b = add_enemy(game, x=700, hp=100)
     game.ship.x = 700
-    give(game, "overdrive")
+    activate(game, "overdrive")
     game.ship.fire_timer = 0
     weapons.fire(game)
     run(game, 0.5)
@@ -238,7 +343,7 @@ def test_pickups_fall_and_can_be_missed():
 
 def test_magnet_pulls_pickups_in():
     game = new_game()
-    give(game, "magnet")
+    activate(game, "magnet")
     game._drop_pickup(game.ship.x + 200, game.ship.y - 220)
     kind = game.pickups[0].kind
     game.drain_events()
@@ -412,6 +517,7 @@ def test_game_over_is_emitted_once_per_run_and_restart_cleans_up():
     first = game.run_id
     give(game, "rail")
     give(game, "magnet")
+    activate(game, "overdrive")
     game.score = 4321
     game._drop_pickup(200, 200)
     for _ in range(3):
@@ -431,6 +537,7 @@ def test_game_over_is_emitted_once_per_run_and_restart_cleans_up():
     assert (game.score, game.level, game.lives) == (0, 1, 3)
     ship = game.ship
     assert ship.weapon is None and ship.buffs == {} and ship.hull == game.cfg.player.max_hull
+    assert ship.inventory == []
     assert game.pickups == [] and game.enemy_shots == [] and game.boss is None
     assert game.shock_charge == 1.0 and game.high_score >= 4321
 

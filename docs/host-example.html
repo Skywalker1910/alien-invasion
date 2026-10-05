@@ -43,6 +43,9 @@
     <button data-btn="right">▶</button>
     <button data-btn="fire">FIRE</button>
     <button id="special">SHOCK</button>
+    <button id="prev">◁ WPN</button>
+    <button id="next">WPN ▷</button>
+    <button id="use">USE</button>
   </div>
 </div>
 <script>
@@ -93,6 +96,9 @@
     btn.addEventListener("pointercancel", set(false));
   }
   document.getElementById("special").onclick = () => send({ type: "special" });
+  document.getElementById("prev").onclick = () => send({ type: "switch", direction: -1 });
+  document.getElementById("next").onclick = () => send({ type: "switch", direction: 1 });
+  document.getElementById("use").onclick = () => send({ type: "activate" });
 </script>
 </body>
 </html>
