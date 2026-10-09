@@ -122,11 +122,19 @@ The game opens on a **main menu**: Play, Leaderboard, Tutorial, Help and Quit (Q
 
 ### Leaderboard
 
-When a run ends with a score, the game asks for a **pilot name** (a game name, up to 20 characters) and a **country**. Type to search the country list, then press Enter. Your score goes into the leaderboard, shown as **flag, name, then score** (plus the level reached). Your new entry is highlighted. The game remembers your last name and country for next time, and you can skip saving with Esc. You can also open the leaderboard from the main menu.
+When a run ends, the game asks for a **gaming name** (up to 20 characters) and a **country**. Type to search the country list, then press Enter; Tab moves between the name, the country and the buttons.
+
+- **Save locally** puts the run on this device's leaderboard, shown as **flag, name, then score** (plus the level reached). Your new entry is highlighted.
+- **Save & publish** only appears when the game runs on my portfolio, which hosts a public leaderboard. Before you choose it, the game explains what happens: your gaming name is checked by OpenAI, and the reviewed (or fully masked) name, flag and score are public for up to 180 days. The game shows "Saved publicly" only once the site confirms it. If something goes wrong you can retry or edit, and your name and country are kept.
+- **Skip** (Esc) saves nothing.
+
+The game remembers your last name and country for next time. You can also open the local leaderboard from the main menu.
 
 Scores are kept in a small local database:
 - **Desktop:** a SQLite file at `save/alien_invasion.db` (ignored by git)
 - **Browser:** the page's `localStorage`, so it stays on that device and browser
+
+The public leaderboard lives entirely on the portfolio's server (name review and storage). The game only sends your chosen name, country and run id to the page that embeds it.
 
 The 252 country flags are bundled with the game (`assets/flags/`, fetched once with `tools/fetch_flags.py` from flagcdn.com; national flags are public domain). Nothing is downloaded while you play. If the game is embedded on a website, it also tells the page about each saved score, so the site can keep a global leaderboard if it wants one.
 
@@ -181,6 +189,7 @@ The tests check the important rules:
 - the menus, help pages, pause menu, restart and main menu all work by keyboard and mouse
 - BB-8's briefing freezes the game and shows only on your first run (or from Tutorial); its tips appear once each, queue up instead of overlapping, and stay inside the top bar
 - the leaderboard database (SQLite and in-memory) sorts and ranks scores and keeps settings; the name and flag entry saves correctly, and every country has a bundled flag
+- public publishing needs the explicit **Save & publish** choice, sends one request per click, and shows saved only after the site confirms. Errors offer retry or edit, masked names keep their stars, answers for other runs are ignored, and zero scores work
 - upgrades refresh and expire, missed capsules disappear, and the magnet and the drop guarantee work
 - the shockwave kills a Guardian and then recharges
 - bosses only take damage on their active weapons and always go through 3 stages

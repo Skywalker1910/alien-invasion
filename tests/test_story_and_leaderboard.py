@@ -155,7 +155,8 @@ def test_game_over_asks_for_name_and_country_then_shows_the_board():
     press(app, pygame.K_TAB)
     type_text(app, "ind")
     assert app.menu.form.filtered()[0]["code"] == "in"
-    press(app, pygame.K_RETURN)                    # pick India and save
+    press(app, pygame.K_RETURN)                    # pick India -> focus moves to the buttons
+    press(app, pygame.K_RETURN)                    # "Save locally" (no public host here)
     assert app.menu.screen == BOARD
     top = app.store.top(1)[0]
     assert (top["name"], top["country"], top["score"]) == ("Ace", "in", 4321)
@@ -168,7 +169,7 @@ def test_game_over_asks_for_name_and_country_then_shows_the_board():
     assert app.menu.form.name == "Ace" and app.menu.form.country == "in"
 
 
-def test_skipping_saves_nothing_and_zero_scores_are_not_asked():
+def test_skipping_saves_nothing_and_zero_scores_are_offered():
     app = make_app()
     press(app, pygame.K_RETURN)
     end_run(app, 500)
@@ -179,7 +180,7 @@ def test_skipping_saves_nothing_and_zero_scores_are_not_asked():
     assert app.menu.screen == MAIN
     press(app, pygame.K_RETURN)
     end_run(app, 0)
-    assert app.menu.screen is None                 # nothing to save
+    assert app.menu.screen == ENTRY                # zero scores can be saved too
 
 
 def test_country_list_can_be_clicked():
@@ -208,7 +209,8 @@ def test_entry_form_keyboard_editing():
     key(pygame.K_RETURN)                           # to the country list
     assert form.field == "country" and form.cursor == 0
     key(pygame.K_DOWN)
-    assert key(pygame.K_RETURN) == "save" and form.country == "in"
+    assert key(pygame.K_RETURN) is None and form.country == "in" and form.field == "buttons"
+    assert key(pygame.K_RETURN) == "save"          # without a public host: Save locally, Skip
     assert key(pygame.K_ESCAPE) == "skip"
 
 
