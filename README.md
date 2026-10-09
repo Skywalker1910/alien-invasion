@@ -154,6 +154,10 @@ python build_web.py           # just build into build/web/
 
 My portfolio page embeds this build. The game reports things like run started, score, health, level, game over and saved leaderboard entries to the page. The page can pause the game or send touch controls. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
 
+### Portfolio deployment
+
+My portfolio builds this game straight from this repo's `main` branch. When a change to the game (`main.py`, `invasion/`, `assets/` or `requirements.txt`) lands on `main`, the **Redeploy portfolio arcade** GitHub Action runs the tests and, if they pass, triggers the portfolio's Amplify build through a private webhook (the `AMPLIFY_WEBHOOK_URL` secret). You can also start it by hand from the Actions tab.
+
 ### Artwork
 
 All the ships, bosses, turrets and icons are drawn by code in `tools/make_art.py` and saved as PNGs in `assets/images/`. To regenerate them, for example after changing a boss's weapon positions, run:

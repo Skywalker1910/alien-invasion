@@ -1,0 +1,56 @@
+# Rebuilds the portfolio (which compiles this game with Pygbag) after game
+# changes land on main. The portfolio's Amplify build fetches the ref in its
+# ALIEN_GAME_REF setting (main), so pushes here go live on the next build.
+#
+# Requires the repository secret AMPLIFY_WEBHOOK_URL: an Amplify incoming
+# webhook for the portfolio's main branch. Keep it private; it triggers builds.
+name: Redeploy portfolio arcade
+
+on:
+  push:
+    branches: [main]
+    paths:                      # only changes that end up in the web build
+      - "main.py"
+      - "invasion/**"
+      - "assets/**"
+      - "requirements.txt"
+      - ".github/workflows/redeploy-portfolio.yml"
+  pull_request:                 # tests only; never redeploys from a PR
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portfolio-arcade-deploy-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt "pytest>=8"
+      - name: Run tests
+        run: python -m pytest -q
+
+  redeploy:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger portfolio build
+        env:
+          AMPLIFY_WEBHOOK_URL: ${{ secrets.AMPLIFY_WEBHOOK_URL }}
+        run: |
+          test -n "$AMPLIFY_WEBHOOK_URL"
+          curl --fail --silent --show-error --retry 2 --request POST "$AMPLIFY_WEBHOOK_URL" > /dev/null
