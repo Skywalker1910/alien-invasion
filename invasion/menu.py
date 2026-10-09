@@ -12,7 +12,8 @@ MAIN = "main"
 PAUSE = "pause"
 HELP = "help"
 ENTRY = "entry"          # pilot name + country after a run
-BOARD = "board"          # leaderboard
+BOARD = "board"          # local leaderboard
+PUBLISH = "publish"      # public submission status (saving / saved / error)
 
 HELP_PAGES = ("Story", "Basics", "Controls", "Enemies", "Bosses", "Weapons", "Upgrades")
 
@@ -25,18 +26,49 @@ BACK_KEYS = (pygame.K_ESCAPE, pygame.K_BACKSPACE)
 LIST_ROWS = 8
 
 
-class EntryForm:
-    """Pilot name + country picker shown after a run that scored."""
+NAME_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _.-")
 
-    def __init__(self, countries, name="", country=""):
+
+class EntryForm:
+    """Gaming name + country after a run, with save / publish choices.
+
+    Focus moves name -> country -> buttons (Tab, Enter, arrows). Publishing
+    is only offered when the host page supports a public leaderboard, and
+    only happens when the player activates the "Save & publish" button.
+    """
+
+    def __init__(self, countries, name="", country="", public=False, name_max=NAME_MAX, disclosure=""):
         self.countries = countries          # [{"code": "in", "name": "India"}, ...]
-        self.name = name[:NAME_MAX]
+        self.name_max = min(NAME_MAX, name_max)
+        self.name = "".join(ch for ch in name if ch in NAME_CHARS)[:self.name_max]
         self.country = country
-        self.field = "name"                 # "name" or "country"
+        self.field = "name"                 # "name", "country" or "buttons"
         self.query = ""                     # type-to-filter for the country list
         self.cursor = 0
         self.scroll = 0
+        self.button = 0
+        self.error = ""
+        self.public = False
+        self.disclosure = ""
+        self.configure(public, name_max, disclosure)
         self._jump_to(country)
+
+    def configure(self, public, name_max=NAME_MAX, disclosure=""):
+        """The host's settings may arrive (or change) while the form is open."""
+        self.public = public
+        self.name_max = min(NAME_MAX, name_max)
+        self.name = self.name[:self.name_max]
+        self.disclosure = disclosure
+        self.button = min(self.button, len(self.buttons()) - 1)
+
+    @property
+    def rows(self):
+        return 5 if self.public else LIST_ROWS
+
+    def buttons(self):
+        if self.public:
+            return [("Save & publish", "publish"), ("Save locally", "save"), ("Skip", "skip")]
+        return [("Save locally", "save"), ("Skip", "skip")]
 
     def filtered(self):
         q = self.query.lower()
@@ -50,7 +82,7 @@ class EntryForm:
         for i, c in enumerate(self.filtered()):
             if c["code"] == code:
                 self.cursor = i
-                self.scroll = max(0, i - LIST_ROWS // 2)
+                self.scroll = max(0, i - self.rows // 2)
                 return
 
     def _move(self, step):
@@ -60,38 +92,59 @@ class EntryForm:
         self.cursor = max(0, min(count - 1, self.cursor + step))
         if self.cursor < self.scroll:
             self.scroll = self.cursor
-        elif self.cursor >= self.scroll + LIST_ROWS:
-            self.scroll = self.cursor - LIST_ROWS + 1
+        elif self.cursor >= self.scroll + self.rows:
+            self.scroll = self.cursor - self.rows + 1
 
     def scroll_by(self, step):
         self._move(step)
 
     def choose(self, code):
         self.country = code
+        self.error = ""
         self._jump_to(code)
 
+    def press(self, index):
+        """A button was activated (click or Enter); returns its action."""
+        self.button = index
+        return self.buttons()[index][1]
+
     def key(self, event):
-        """Returns "save", "skip" or None."""
+        """Returns "publish", "save", "skip" or None."""
         key = event.key
         if key == pygame.K_ESCAPE:
             return "skip"
         if key == pygame.K_TAB:
-            self.field = "country" if self.field == "name" else "name"
+            order = ["name", "country", "buttons"]
+            self.field = order[(order.index(self.field) + 1) % 3]
             return None
         if self.field == "name":
             if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_DOWN):
                 self.field = "country"
             elif key == pygame.K_BACKSPACE:
                 self.name = self.name[:-1]
-            elif event.unicode and event.unicode.isprintable() and len(self.name) < NAME_MAX:
-                self.name += event.unicode
+            elif event.unicode and event.unicode in NAME_CHARS and len(self.name) < self.name_max:
+                if not (event.unicode == " " and (not self.name or self.name.endswith(" "))):
+                    self.name += event.unicode
+                    self.error = ""
+            return None
+        if self.field == "buttons":
+            count = len(self.buttons())
+            if key in (pygame.K_LEFT, pygame.K_a):
+                self.button = (self.button - 1) % count
+            elif key in (pygame.K_RIGHT, pygame.K_d):
+                self.button = (self.button + 1) % count
+            elif key == pygame.K_UP:
+                self.field = "country"
+            elif key in OK_KEYS:
+                return self.press(self.button)
             return None
         # country field
         if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
             options = self.filtered()
             if options:
-                self.country = options[self.cursor]["code"]
-            return "save"
+                self.choose(options[self.cursor]["code"])
+            self.field = "buttons"
+            return None
         if key == pygame.K_UP:
             if self.cursor == 0:
                 self.field = "name"
@@ -99,9 +152,9 @@ class EntryForm:
         elif key == pygame.K_DOWN:
             self._move(1)
         elif key == pygame.K_PAGEUP:
-            self._move(-LIST_ROWS)
+            self._move(-self.rows)
         elif key == pygame.K_PAGEDOWN:
-            self._move(LIST_ROWS)
+            self._move(self.rows)
         elif key == pygame.K_BACKSPACE:
             self.query = self.query[:-1]
             self.cursor = self.scroll = 0
@@ -123,6 +176,7 @@ class Menu:
         self.board = []               # leaderboard rows to show
         self.highlight = None         # id of the entry just saved
         self.after_run = False        # leaderboard reached from game over
+        self.publication = None       # publish.Publication while PUBLISH is open
 
     def items(self):
         if self.screen == MAIN:
@@ -131,6 +185,16 @@ class Menu:
         elif self.screen == PAUSE:
             items = [("Resume", "resume"), ("Help", "help"), ("Restart run", "restart"),
                      ("Main menu", "main_menu")]
+        elif self.screen == PUBLISH:
+            pub = self.publication
+            items = []
+            if pub and pub.can_retry:
+                items += [("Retry", "retry"), ("Edit", "edit")]
+            elif pub and pub.status == "error":
+                items.append(("Edit", "edit"))
+            if pub and pub.status == "error":
+                return items + [("Play again", "play"), ("Main menu", "main_menu")]   # Esc: local scores
+            return items + [("Play again", "play"), ("Local scores", "local_board"), ("Main menu", "main_menu")]
         elif self.screen == BOARD:
             return ([("Play again", "play"), ("Main menu", "main_menu")] if self.after_run
                     else [("Back", "back")])
@@ -188,6 +252,9 @@ class Menu:
             self.form.field = "country"
             self.form.choose(action.split(":")[1])
             return None
+        if action and action.startswith("button:") and self.form:
+            self.form.field = "buttons"
+            return self.form.press(int(action.split(":")[1]))
         return action
 
     def key_event(self, event):
@@ -206,9 +273,10 @@ class Menu:
         items = self.items()
         if not items:
             return None
-        if key in UP_KEYS:
+        horizontal = self.screen in (BOARD, PUBLISH)      # buttons laid out in a row
+        if key in UP_KEYS or (horizontal and key in (pygame.K_LEFT, pygame.K_a)):
             self.index = (self.index - 1) % len(items)
-        elif key in DOWN_KEYS:
+        elif key in DOWN_KEYS or (horizontal and key in (pygame.K_RIGHT, pygame.K_d)):
             self.index = (self.index + 1) % len(items)
         elif key in OK_KEYS:
             return self._do(items[self.index][1])
@@ -220,6 +288,8 @@ class Menu:
             return "main_menu" if self.after_run else self._do("back")
         elif self.screen == BOARD and key == pygame.K_r and self.after_run:
             return "play"
+        elif self.screen == PUBLISH and key == pygame.K_ESCAPE:
+            return "local_board"
         return None
 
     def wheel(self, step):

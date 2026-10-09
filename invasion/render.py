@@ -15,7 +15,7 @@ from . import codex
 from .game import GAME_OVER, PLAYING, TITLE
 from .levels import THEMES
 from .countries import flag_path
-from .menu import BOARD, ENTRY, HELP, HELP_PAGES, LIST_ROWS, MAIN, PAUSE
+from .menu import BOARD, ENTRY, HELP, HELP_PAGES, MAIN, PAUSE, PUBLISH
 
 ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
@@ -374,6 +374,8 @@ class Renderer:
             self._draw_entry(target, menu, game)
         elif screen == BOARD:
             self._draw_board(target, menu)
+        elif screen == PUBLISH:
+            self._draw_publish(target, menu, game)
         elif game.paused:
             self._dim(target)
             self.blit_text(target, "PAUSED", 80, TEXT, center=(self.width // 2, self.height // 2))
@@ -1203,68 +1205,138 @@ class Renderer:
     def _draw_entry(self, surf, menu, game):
         form = menu.form
         menu.hitboxes = []
-        panel = self._panel(surf, 640, 560, 190)
-        x = panel.x + 30
-        self.blit_text(surf, "GAME OVER", 52, RED, shadow=True, midtop=(panel.centerx, panel.y + 14))
-        self.blit_text(surf, f"Score {game.score:,}   ·   level {game.level}", 28, TEXT,
-                       midtop=(panel.centerx, panel.y + 62))
-        self.blit_text(surf, "Save your score to the leaderboard", 22, DIM, midtop=(panel.centerx, panel.y + 92))
+        panel = self._panel(surf, 680, 604, 190)
+        x, w = panel.x + 30, panel.w - 60
+        self.blit_text(surf, "GAME OVER", 46, RED, shadow=True, midtop=(panel.centerx, panel.y + 10))
+        self.blit_text(surf, f"Score {game.score:,}   ·   level {game.level}", 26, TEXT,
+                       midtop=(panel.centerx, panel.y + 52))
+        lead = ("Save on this device, or publish to the public leaderboard" if form.public
+                else "Save your score on this device")
+        self.blit_text(surf, lead, 20, DIM, midtop=(panel.centerx, panel.y + 78))
 
-        # Name
-        self.blit_text(surf, "PILOT NAME", 20, YELLOW if form.field == "name" else DIM, topleft=(x, panel.y + 126))
-        box = pygame.Rect(x, panel.y + 146, panel.w - 60, 40)
+        # Gaming name
+        y = panel.y + 102
+        self.blit_text(surf, f"GAMING NAME  (up to {form.name_max} characters)", 18,
+                       YELLOW if form.field == "name" else DIM, topleft=(x, y))
+        box = pygame.Rect(x, y + 18, w, 36)
         pygame.draw.rect(surf, (20, 26, 54), box, border_radius=8)
         pygame.draw.rect(surf, YELLOW if form.field == "name" else PANEL_EDGE, box, 2, border_radius=8)
-        flag = self.flag(form.country, (36, 24))
+        flag = self.flag(form.country, (33, 22))
         surf.blit(flag, flag.get_rect(midleft=(box.x + 10, box.centery)))
         text = form.name or ""
-        r = self.blit_text(surf, text or "Pilot", 30, TEXT if text else DIM, midleft=(box.x + 56, box.centery))
+        r = self.blit_text(surf, text or "Pilot", 28, TEXT if text else DIM, midleft=(box.x + 54, box.centery))
+        self.blit_text(surf, f"{len(text)}/{form.name_max}", 16, DIM, midright=(box.right - 10, box.centery))
         if form.field == "name" and int(self.time * 2) % 2 == 0:
-            cx = r.right + 2 if text else box.x + 56
-            pygame.draw.line(surf, TEXT, (cx, box.y + 9), (cx, box.bottom - 9), 2)
+            cx = r.right + 2 if text else box.x + 54
+            pygame.draw.line(surf, TEXT, (cx, box.y + 8), (cx, box.bottom - 8), 2)
         menu.hitboxes.append((box, "field:name"))
 
         # Country search + list
-        self.blit_text(surf, "COUNTRY", 20, YELLOW if form.field == "country" else DIM,
-                       topleft=(x, panel.y + 198))
-        search = pygame.Rect(x, panel.y + 218, panel.w - 60, 32)
+        y = box.bottom + 8
+        self.blit_text(surf, "COUNTRY", 18, YELLOW if form.field == "country" else DIM, topleft=(x, y))
+        search = pygame.Rect(x, y + 18, w, 30)
         pygame.draw.rect(surf, (20, 26, 54), search, border_radius=8)
         pygame.draw.rect(surf, YELLOW if form.field == "country" else PANEL_EDGE, search, 2, border_radius=8)
         if form.query:
-            self.blit_text(surf, form.query, 24, TEXT, midleft=(search.x + 12, search.centery))
+            self.blit_text(surf, form.query, 22, TEXT, midleft=(search.x + 12, search.centery))
         else:
-            self.blit_text(surf, "Type to search, Up / Down to choose", 20, DIM, midleft=(search.x + 12, search.centery))
+            self.blit_text(surf, "Type to search, Up / Down to choose, Enter to pick", 18, DIM,
+                           midleft=(search.x + 12, search.centery))
         menu.hitboxes.append((search, "field:country"))
         options = form.filtered()
-        row_h = 30
-        for i, c in enumerate(options[form.scroll:form.scroll + LIST_ROWS]):
+        row_h = 28
+        for i, c in enumerate(options[form.scroll:form.scroll + form.rows]):
             index = form.scroll + i
-            row = pygame.Rect(x, search.bottom + 6 + i * row_h, panel.w - 60, row_h - 2)
+            row = pygame.Rect(x, search.bottom + 4 + i * row_h, w, row_h - 2)
             active = form.field == "country" and index == form.cursor
             chosen = c["code"] == form.country
             if active:
                 pygame.draw.rect(surf, (34, 44, 90), row, border_radius=6)
-            surf.blit(self.flag(c["code"], (30, 20)), (row.x + 8, row.y + 4))
-            self.blit_text(surf, c["name"], 24, YELLOW if chosen else TEXT, midleft=(row.x + 50, row.centery))
+            surf.blit(self.flag(c["code"], (30, 20)), (row.x + 8, row.y + 3))
+            self.blit_text(surf, c["name"], 22, YELLOW if chosen else TEXT, midleft=(row.x + 50, row.centery))
             if chosen:
-                self.blit_text(surf, "selected", 18, YELLOW, midright=(row.right - 10, row.centery))
+                self.blit_text(surf, "selected", 17, YELLOW, midright=(row.right - 10, row.centery))
             menu.hitboxes.append((row, f"country:{c['code']}"))
         if not options:
-            self.blit_text(surf, "No country matches", 22, DIM, topleft=(x + 8, search.bottom + 10))
+            self.blit_text(surf, "No country matches", 20, DIM, topleft=(x + 8, search.bottom + 8))
+        y = search.bottom + 4 + form.rows * row_h + 6
 
-        save = pygame.Rect(0, 0, 200, 44)
-        save.bottomright = (panel.centerx - 10, panel.bottom - 16)
-        skip = pygame.Rect(0, 0, 200, 44)
-        skip.bottomleft = (panel.centerx + 10, panel.bottom - 16)
-        self._button(surf, menu, save, "Save  (Enter)", "save", True)
-        self._button(surf, menu, skip, "Skip  (Esc)", "skip")
-        self.blit_text(surf, "Tab switches between name and country", 18, DIM,
-                       midbottom=(panel.centerx, save.top - 6))
+        # Public disclosure, shown before the player can choose to publish
+        if form.public:
+            lines = self.wrap(form.disclosure, 18, w - 24)[:5]
+            note = pygame.Rect(x, y, w, 12 + 18 * len(lines))
+            pygame.draw.rect(surf, (28, 24, 18), note, border_radius=8)
+            pygame.draw.rect(surf, ORANGE, note, 1, border_radius=8)
+            for i, line in enumerate(lines):
+                self.blit_text(surf, line, 18, (255, 215, 170), topleft=(note.x + 12, note.y + 6 + i * 18))
+
+        if form.error:
+            self.blit_text(surf, form.error, 20, RED, midbottom=(panel.centerx, panel.bottom - 70))
+        buttons = form.buttons()
+        bw = 190 if len(buttons) == 3 else 220
+        total = len(buttons) * bw + (len(buttons) - 1) * 14
+        bx = panel.centerx - total // 2
+        for i, (label, _) in enumerate(buttons):
+            rect = pygame.Rect(bx + i * (bw + 14), panel.bottom - 62, bw, 44)
+            focused = form.field == "buttons" and i == form.button
+            self._button(surf, menu, rect, label, f"button:{i}", focused)
+        self.blit_text(surf, "Tab: name  >  country  >  buttons   ·   Esc: skip", 16, DIM,
+                       midbottom=(panel.centerx, panel.bottom - 4))
+
+    def _draw_publish(self, surf, menu, game):
+        """Public submission status. "Saved publicly" only after the host's
+        saved acknowledgement; until then the result is never claimed."""
+        from .publish import ERROR, SAVED, SAVING, SENDING
+        pub = menu.publication
+        menu.hitboxes = []
+        panel = self._panel(surf, 640, 440, 200)
+        self.blit_text(surf, "PUBLIC LEADERBOARD", 40, YELLOW, shadow=True, midtop=(panel.centerx, panel.y + 16))
+        dots = "." * (1 + int(self.time * 3) % 3)
+        title, color = {
+            SENDING: (f"Contacting the site{dots}", DIM),
+            SAVING: (f"Saving{dots}", CYAN),
+            SAVED: ("Saved publicly", GREEN),
+            ERROR: ("Not saved", RED),
+        }.get(pub.status if pub else None, ("", TEXT))
+        self.blit_text(surf, title, 34, color, midtop=(panel.centerx, panel.y + 66))
+
+        # Card: flag, the name the board shows (reviewed / masked once saved), score
+        card = pygame.Rect(panel.x + 40, panel.y + 112, panel.w - 80, 64)
+        pygame.draw.rect(surf, (22, 28, 58), card, border_radius=10)
+        pygame.draw.rect(surf, color, card, 2, border_radius=10)
+        if pub:
+            saved = pub.status == SAVED
+            country = pub.public_country if saved and pub.public_country else pub.country
+            name = pub.public_name if saved and pub.public_name else pub.name
+            score = pub.public_score if saved and pub.public_score is not None else pub.score
+            surf.blit(self.flag(country, (45, 30)), (card.x + 16, card.centery - 15))
+            self.blit_text(surf, name, 32, TEXT if saved else DIM, midleft=(card.x + 76, card.centery))
+            self.blit_text(surf, f"{score:,}", 30, YELLOW, midright=(card.right - 18, card.centery))
+            if not saved:
+                note = "awaiting review" if pub.status != ERROR else "not published"
+                self.blit_text(surf, note, 16, DIM, midleft=(card.x + 78, card.bottom - 10))
+            elif pub.masked:
+                self.blit_text(surf, "name masked by review", 16, ORANGE, midleft=(card.x + 78, card.bottom - 10))
+            y = card.bottom + 16
+            for line in self.wrap(pub.message, 22, panel.w - 80)[:4]:
+                self.blit_text(surf, line, 22, TEXT, midtop=(panel.centerx, y))
+                y += 24
+            if saved:
+                self.blit_text(surf, "Public scores are unverified community submissions.", 17, DIM,
+                               midtop=(panel.centerx, y + 4))
+        items = menu.items()
+        bw = min(180, (panel.w - 40 - 12 * (len(items) - 1)) // len(items))
+        total = len(items) * bw + (len(items) - 1) * 12
+        bx = panel.centerx - total // 2
+        for i, (label, action) in enumerate(items):
+            rect = pygame.Rect(bx + i * (bw + 12), panel.bottom - 62, bw, 44)
+            self._button(surf, menu, rect, label, action, i == menu.index)
 
     def _draw_board(self, surf, menu):
         menu.hitboxes = []
         panel = self._panel(surf, 640, 560, 215)
-        self.blit_text(surf, "LEADERBOARD", 50, YELLOW, shadow=True, midtop=(panel.centerx, panel.y + 14))
+        self.blit_text(surf, "LOCAL LEADERBOARD", 46, YELLOW, shadow=True, midtop=(panel.centerx, panel.y + 12))
+        self.blit_text(surf, "Scores saved on this device", 18, DIM, midtop=(panel.centerx, panel.y + 54))
         x = panel.x + 34
         head_y = panel.y + 72
         for label, pos, align in (("#", x + 10, "midleft"), ("PILOT", x + 100, "midleft"),

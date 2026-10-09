@@ -11,7 +11,8 @@ from .controls import Controls
 from .countries import load_countries
 from .game import GAME_OVER, GAME_VERSION, PLAYING, TITLE, Game
 from .guide import Guide
-from .menu import BOARD, ENTRY, HELP, MAIN, PAUSE, EntryForm, Menu
+from .menu import BOARD, ENTRY, HELP, MAIN, PAUSE, PUBLISH, EntryForm, Menu
+from .publish import HostConfig, Publication
 from .render import Renderer
 from .storage import clean_country, clean_name, open_store
 
@@ -40,6 +41,9 @@ class App:
         self.guide = Guide()
         self.store = store if store is not None else open_store()
         self.countries = load_countries()
+        self.host = HostConfig()          # what the embedding page supports (browser only)
+        self.publication = None           # public submission for the last finished run
+        self.last_form = None             # kept so Edit / Retry reuse the player's inputs
         self.country_codes = {c["code"] for c in self.countries}
         self.bridge = create_bridge()
         self.reporter = StateReporter(self.bridge)
@@ -73,6 +77,11 @@ class App:
     # Actions (from menus, keys and the host)
     # ------------------------------------------------------------------
     def start(self, seed=None, tutorial=False):
+        # A new run never inherits the old run's submission: late answers for
+        # it are ignored because they carry the old run id.
+        self.publication = None
+        self.menu.publication = None
+        self.last_form = None
         self.game.start_run(seed)
         self.menu.screen = None
         self.controls.consume_edges()
@@ -90,16 +99,67 @@ class App:
     def show_leaderboard(self, highlight=None, after_run=False):
         self.menu.open_board(self.store.top(10), highlight, after_run)
 
-    def save_score(self):
-        form, game = self.menu.form, self.game
+    def _save_locally(self, form):
+        """Device-local leaderboard (SQLite / localStorage). Never public."""
+        game = self.game
         name = clean_name(form.name)
         country = clean_country(form.country, self.country_codes)
         entry_id = self.store.add_score(name, country, game.score, game.level, game.run_id, game.seed)
         self.store.set("pilot", {"name": name, "country": country})
+        return entry_id, name, country
+
+    def save_score(self):
+        """"Save locally": local leaderboard only. score_saved carries
+        publish:false, so a host never treats it as public consent."""
+        form, game = self.menu.form, self.game
+        entry_id, name, country = self._save_locally(form)
         self.bridge.emit({"type": "score_saved", "name": name, "country": country, "score": game.score,
                           "level": game.level, "run_id": game.run_id, "seed": game.seed,
-                          "rank": self.store.rank(entry_id)})
+                          "rank": self.store.rank(entry_id), "publish": False})
         self.show_leaderboard(entry_id, after_run=True)
+
+    def publish_score(self):
+        """"Save & publish": the player's explicit public opt-in. Saves
+        locally too, then asks the host to review and publish this run."""
+        form, game = self.menu.form, self.game
+        if not self.host.public or form is None:
+            return
+        name = clean_name(form.name)
+        if not form.name.strip():
+            form.error = "Enter a gaming name to publish."
+            form.field = "name"
+            return
+        country = clean_country(form.country, self.country_codes)
+        if not country:
+            form.error = "Choose a country to publish."
+            form.field = "country"
+            return
+        if self.publication and self.publication.run_id == game.run_id:
+            # Edited after an error: same run, new inputs, same request rules.
+            self.publication.name, self.publication.country = name, country
+        else:
+            self._save_locally(form)
+            self.publication = Publication(game.run_id, name, country, game.score)
+        self.last_form = form
+        self.menu.publication = self.publication
+        self.menu.open(PUBLISH)
+        self._send_publication()
+
+    def _send_publication(self):
+        event = self.publication.request() if self.publication else None
+        if event:
+            self.bridge.emit(event)
+
+    def _apply_host_config(self, cmd):
+        self.host.update(cmd)
+        form = self.menu.form or self.last_form
+        if form:
+            form.configure(self.host.public, self.host.name_max, self.host.disclosure)
+
+    def _apply_publication(self, cmd):
+        pub = self.publication
+        if pub and pub.acknowledge(cmd) and pub.status == "saved" and self.menu.screen == PUBLISH:
+            self.menu.index = 0
 
     def act(self, action):
         game = self.game
@@ -111,6 +171,14 @@ class App:
             self.show_leaderboard()
         elif action == "save" and self.menu.form:
             self.save_score()
+        elif action == "publish" and self.menu.form:
+            self.publish_score()
+        elif action == "retry" and self.publication:
+            self._send_publication()
+        elif action == "edit" and self.last_form and self.publication and not self.publication.pending:
+            self.menu.open_entry(self.last_form)
+        elif action == "local_board":
+            self.show_leaderboard(after_run=True)
         elif action == "skip":
             self.show_leaderboard(after_run=True)
         elif action == "resume":
@@ -133,12 +201,14 @@ class App:
             self.controls.release_all()
 
     def _after_game_over(self):
-        """Ask for a pilot name if the run scored anything."""
+        """Offer to save (and, with a public host, publish) every finished run,
+        including zero scores."""
         self.guide.stop()
-        if self.game.score <= 0 or self.autoplay:
+        if self.autoplay:
             return
         pilot = self.store.get("pilot", {}) or {}
-        self.menu.open_entry(EntryForm(self.countries, pilot.get("name", ""), pilot.get("country", "")))
+        self.menu.open_entry(EntryForm(self.countries, pilot.get("name", ""), pilot.get("country", ""),
+                                       self.host.public, self.host.name_max, self.host.disclosure))
 
     def _sync_menu(self):
         """Keep the menu in step with pauses/resumes coming from elsewhere."""
@@ -233,6 +303,10 @@ class App:
                 self.controls.press_switch(-1 if cmd.get("direction", 1) < 0 else 1)
             elif kind == "select" and isinstance(cmd.get("slot"), int):
                 self.controls.press_select(cmd["slot"])
+            elif kind == "host_config":
+                self._apply_host_config(cmd)
+            elif kind == "score_publication":
+                self._apply_publication(cmd)
             elif kind == "skip_briefing" and self.guide.blocking:
                 self.guide.skip()
                 self.finish_briefing()
@@ -272,6 +346,8 @@ class App:
             inp = self.controls.state()
         self._sync_menu()
         self.guide.update(frame_dt)
+        if self.publication:
+            self.publication.update(frame_dt)
         # The briefing freezes the game: no simulation steps until it's done.
         if not self.guide.blocking and game.advance(frame_dt, inp) > 0:
             self.controls.consume_edges()

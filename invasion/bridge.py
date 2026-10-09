@@ -71,7 +71,7 @@ FORWARDED_EVENTS = {
 
 # Commands the host may send. Anything else is ignored.
 COMMANDS = {"pause", "resume", "input", "special", "switch", "select", "start", "restart",
-            "skip_briefing"}
+            "skip_briefing", "host_config", "score_publication"}
 
 
 class NullBridge:

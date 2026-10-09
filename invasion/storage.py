@@ -27,8 +27,8 @@ _NAME_OK = re.compile(r"[^A-Za-z0-9 _\-.]")
 
 
 def clean_name(name):
-    """Letters, digits, space, _ - . only; trimmed to NAME_MAX characters."""
-    name = _NAME_OK.sub("", str(name or "")).strip()[:NAME_MAX].strip()
+    """Letters, digits, space, _ - . only; single spaces; at most NAME_MAX characters."""
+    name = re.sub(" +", " ", _NAME_OK.sub("", str(name or ""))).strip()[:NAME_MAX].strip()
     return name or "Pilot"
 
 
