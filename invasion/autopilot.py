@@ -59,6 +59,6 @@ def autopilot(game):
             if best_cost is None or cost < best_cost:
                 best, best_cost = (dx, dy), cost
     dx, dy = best
-    crowded = len(game.enemy_shots) >= 10 or (ship.hull < 40 and game.enemy_shots)
+    crowded = len(game.enemy_shots) >= 10 or (ship.health < 40 and game.enemy_shots)
     return InputState(left=dx < 0, right=dx > 0, up=dy < 0, down=dy > 0, fire=True,
                       special=crowded and game.shock_charge >= 1.0)

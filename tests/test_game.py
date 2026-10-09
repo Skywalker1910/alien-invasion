@@ -64,9 +64,8 @@ def add_enemy(game, kind="guardian", x=None, y=200, hp=None):
 
 
 def activate(game, kind):
-    """Collect a storable upgrade and switch it on straight away."""
+    """Upgrades switch on the moment they are collected."""
     give(game, kind)
-    game.select_slot(game.ship.find(kind))
 
 
 def of_type(events, kind):
@@ -83,26 +82,26 @@ def wait_iframes(game):
 def test_damage_goes_to_armor_first_then_hull():
     game = new_game()
     hit_ship(game, 30)
-    assert game.ship.hull == 70
+    assert game.ship.health == 70
     give(game, "armor")
     wait_iframes(game)
     hit_ship(game, 30)
-    assert (game.ship.armor, game.ship.hull) == (20, 70)
+    assert (game.ship.armor, game.ship.health) == (20, 70)
     wait_iframes(game)
     hit_ship(game, 30)
-    assert (game.ship.armor, game.ship.hull) == (0, 60)
+    assert (game.ship.armor, game.ship.health) == (0, 60)
 
 
 def test_one_burst_cannot_chain_damage():
     game = new_game()
     hit_ship(game, 10, count=4)
-    assert game.ship.hull == 90
+    assert game.ship.health == 90
     run(game, 0.1)
     hit_ship(game, 10)
-    assert game.ship.hull == 90              # still inside the i-frames
+    assert game.ship.health == 90              # still inside the i-frames
     wait_iframes(game)
     hit_ship(game, 10)
-    assert game.ship.hull == 80
+    assert game.ship.health == 80
 
 
 def test_three_ships_means_three_hull_bars():
@@ -110,7 +109,7 @@ def test_three_ships_means_three_hull_bars():
     pc = game.cfg.player
     for expected in (2, 1, 0):
         assert game.ship.alive
-        hit_ship(game, pc.max_hull)
+        hit_ship(game, pc.max_health)
         assert game.lives == expected
         assert not game.ship.alive
         run(game, pc.respawn_delay + pc.invulnerable_time + 0.1)
@@ -124,10 +123,10 @@ def test_shield_blocks_a_number_of_hits():
     assert game.ship.shield == charges
     for _ in range(int(charges)):
         hit_ship(game, 25)                   # blocks even back to back
-    assert game.ship.hull == game.cfg.player.max_hull
+    assert game.ship.health == game.cfg.player.max_health
     assert game.ship.shield == 0
     hit_ship(game, 25)
-    assert game.ship.hull == 75
+    assert game.ship.health == 75
 
 
 def test_losing_a_ship_resets_loadout_but_keeps_shockwave():
@@ -143,10 +142,10 @@ def test_losing_a_ship_resets_loadout_but_keeps_shockwave():
     assert ship.weapon is None and ship.buffs == {} and ship.armor == 0 and ship.shield == 0
     assert ship.inventory == []
     run(game, pc.respawn_delay + 0.05)
-    assert ship.alive and ship.hull == pc.max_hull
+    assert ship.alive and ship.health == pc.max_health
     assert 0 < ship.invulnerable_timer <= pc.invulnerable_time
     hit_ship(game, 50)
-    assert ship.hull == pc.max_hull          # blinking ship can't be hurt
+    assert ship.health == pc.max_health          # blinking ship can't be hurt
     assert game.shock_charge > 0.6
 
 
@@ -235,38 +234,36 @@ def test_empty_weapon_leaves_and_next_weapon_is_equipped():
     assert of_type(events, "weapon_empty") and of_type(events, "weapon_switched")
 
 
-def test_upgrades_are_stored_until_activated():
+def test_upgrades_activate_instantly_and_never_use_slots():
     game = new_game()
-    give(game, "overdrive")
-    give(game, "magnet")
+    for kind in ("overdrive", "magnet", "wingmen"):
+        give(game, kind)
     ship = game.ship
-    assert ship.buffs == {}
+    assert ship.inventory == []
+    assert ship.buffs == {k: game.cfg.pickups[k].duration for k in ("overdrive", "magnet", "wingmen")}
     run(game, 3)
-    assert ship.inventory[0].time == game.cfg.pickups["overdrive"].duration
-    game.step(InputState(activate=True))             # F: oldest stored upgrade
-    assert "overdrive" in ship.buffs and [s.kind for s in ship.inventory] == ["magnet"]
-    game.step(InputState(select=0))                  # number key on an upgrade activates it
-    assert "magnet" in ship.buffs and ship.inventory == []
-    # Cycling weapons never touches upgrades.
-    give(game, "wingmen")
-    game.step(InputState(switch=1))
-    assert "wingmen" not in ship.buffs and ship.find("wingmen") == 0
+    game.drain_events()
+    give(game, "overdrive")                          # again: refreshed to full
+    assert ship.buffs["overdrive"] == game.cfg.pickups["overdrive"].duration
+    assert of_type(game.drain_events(), "pickup")[0]["result"] == "refreshed"
 
 
 def test_full_inventory_replaces_the_emptiest_slot():
-    game = new_game()
-    cap = game.cfg.player.inventory_slots
-    kinds = list(game.cfg.weapons) + ["wingmen", "overdrive"]
-    for kind in kinds:
+    cfg = Config()
+    cfg.player.inventory_slots = 4
+    game = Game(cfg, seed=1)
+    game.start_run()
+    calm(game)
+    for kind in ("spread", "rapid", "rail", "homing"):
         give(game, kind)
     ship = game.ship
-    assert len(ship.inventory) == cap
+    assert len(ship.inventory) == 4
     ship.selected = 0                                # spread equipped, protected
     ship.inventory[2].ammo = 1                       # railgun nearly empty
     game.drain_events()
-    give(game, "magnet")
-    assert len(ship.inventory) == cap
-    assert ship.find("rail") is None and ship.find("magnet") is not None
+    give(game, "plasma")
+    assert len(ship.inventory) == 4
+    assert ship.find("rail") is None and ship.find("plasma") is not None
     assert ship.weapon == "spread"
     assert of_type(game.drain_events(), "inventory_replaced")[0]["kind"] == "rail"
 
@@ -275,11 +272,11 @@ def test_losing_a_ship_keeps_the_rest_of_the_inventory():
     game = new_game()
     give(game, "rail")
     give(game, "laser")
-    give(game, "overdrive")
+    give(game, "plasma")
     activate(game, "wingmen")
     hit_ship(game, 500)
     ship = game.ship
-    assert [s.kind for s in ship.inventory] == ["laser", "overdrive"]
+    assert [s.kind for s in ship.inventory] == ["laser", "plasma"]
     assert ship.weapon is None and ship.buffs == {}
 
 
@@ -364,13 +361,13 @@ def test_utility_caps():
     pc = game.cfg.player
     hit_ship(game, 50)
     give(game, "repair")
-    assert game.ship.hull == 85
+    assert game.ship.health == 85
     for _ in range(5):
         give(game, "repair")
         give(game, "armor")
         give(game, "shield")
         give(game, "life")
-    assert game.ship.hull == pc.max_hull
+    assert game.ship.health == pc.max_health
     assert game.ship.armor == pc.max_armor
     assert game.ship.shield == pc.max_shield
     assert game.lives == pc.max_lives
@@ -536,7 +533,7 @@ def test_game_over_is_emitted_once_per_run_and_restart_cleans_up():
     assert game.state == PLAYING and game.run_id != first
     assert (game.score, game.level, game.lives) == (0, 1, 3)
     ship = game.ship
-    assert ship.weapon is None and ship.buffs == {} and ship.hull == game.cfg.player.max_hull
+    assert ship.weapon is None and ship.buffs == {} and ship.health == game.cfg.player.max_health
     assert ship.inventory == []
     assert game.pickups == [] and game.enemy_shots == [] and game.boss is None
     assert game.shock_charge == 1.0 and game.high_score >= 4321
@@ -606,6 +603,6 @@ def test_same_seed_and_inputs_give_the_same_run():
             if game.state != PLAYING:
                 break
         return (game.score, game.level, game.wave, game.lives, game.kills, game.ticks,
-                round(game.ship.hull, 3), [(e.kind, round(e.x, 2), round(e.y, 2)) for e in game.enemies])
+                round(game.ship.health, 3), [(e.kind, round(e.x, 2), round(e.y, 2)) for e in game.enemies])
     assert play(77) == play(77)
     assert play(77) != play(78)

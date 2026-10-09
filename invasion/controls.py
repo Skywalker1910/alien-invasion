@@ -11,7 +11,6 @@ FIRE_KEYS = (pygame.K_SPACE,)
 SPECIAL_KEYS = (pygame.K_LSHIFT, pygame.K_RSHIFT)
 PREV_KEYS = (pygame.K_q,)
 NEXT_KEYS = (pygame.K_e,)
-ACTIVATE_KEYS = (pygame.K_f,)
 # 1..9 then 0 select inventory slots 1..10 (index 0..9)
 SLOT_KEYS = {key: i for i, key in enumerate(
     (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
@@ -28,7 +27,6 @@ class Controls:
         self.special_pressed = False
         self.switch = 0
         self.select = -1
-        self.activate = False
 
     def key_down(self, key):
         """Track a key press during play."""
@@ -39,8 +37,6 @@ class Controls:
             self.switch = -1
         elif key in NEXT_KEYS:
             self.switch = 1
-        elif key in ACTIVATE_KEYS:
-            self.activate = True
         elif key in SLOT_KEYS:
             self.select = SLOT_KEYS[key]
 
@@ -62,9 +58,6 @@ class Controls:
     def press_select(self, slot):
         self.select = slot
 
-    def press_activate(self):
-        self.activate = True
-
     def release_all(self):
         """Forget held keys, e.g. when the window loses focus."""
         self.held.clear()
@@ -82,11 +75,9 @@ class Controls:
             special=self.special_pressed,
             switch=self.switch,
             select=self.select,
-            activate=self.activate,
         )
 
     def consume_edges(self):
         self.special_pressed = False
         self.switch = 0
         self.select = -1
-        self.activate = False

@@ -14,11 +14,19 @@ These days this is my **weekend hobby project**. I'm using AI coding agents to h
 
 Every change goes in as its own commit, so the git history shows how the game grows over time.
 
+## The story
+
+*Year 2387.* The **Aurora Gate** is humanity's last hyperspace gate, and every colony ship comes home through it. The **Vex Armada** wants it dark: its swarms and three motherships are already crossing the Outer Rim. You fly the **Starling**, the only fighter left at the gate. Hold the line through ten sectors and take down their motherships.
+
+The first time you play, **Orbi**, your flight droid, flies in at the start of level 1. Orbi tells you the story and walks you through the controls. Press Space or Enter to go on, Left to go back, or Esc to skip. The game waits until Orbi is done. After that, Orbi pops up with a one-time tip the first time something new happens: your first capsule, first stored weapon, first hit, first boss, and so on. You can replay the briefing any time with **Tutorial** on the main menu.
+
+(Orbi is an original character I designed for this game, a floating guide droid with a halo ring and an LED face.)
+
 ## How to play
 
 Enemy squadrons swoop in from the corners, slide in from the sides, stream across the screen and dive at you. Every run is different: the waves are random, but the same seed always gives the same run.
 
-- Your ship has a **hull bar**. Bullets, beams, rams and mines chip away at it. You have **3 ships**.
+- Your ship has a **health bar** (the ❤ in the bottom-left). Bullets, beams, rams and mines chip away at it. You have **3 ships**.
 - After a hit you flash for a moment and can't be hit again right away, so one burst can't wipe you out.
 - Each level has its own sector, enemy mix and hazards (asteroid fields, minefields). Clear every wave to warp to the next sector.
 - **Levels 3, 6 and 10 are boss fights.** After level 10 it keeps going in endless mode, with a boss every 5 levels.
@@ -76,23 +84,24 @@ Wrecks sometimes drop capsules that fall toward the bottom of the screen. Fly in
 
 | Upgrade | What it does |
 | --- | --- |
-| Repair | +35 hull, applied straight away (drops more often when your hull is low) |
+| Repair | +35 health (drops more often when your health is low) |
 | Shield | Blocks the next 6 hits completely (stacks up to 10) |
-| Armor | +50 armor that soaks damage before the hull (up to 100) |
+| Armor | +50 armor that soaks damage before your health (up to 100) |
 | Shock Charge | Instantly recharges your shockwave |
-| Wingmen | *Stored.* Two little drones fly with you and shoot for 15 s |
-| Overdrive | *Stored.* Double damage and faster fire for 8 s |
-| Magnet | *Stored.* Pulls nearby capsules to you for 14 s |
+| Wingmen | Two little drones fly with you and shoot for 15 s |
+| Overdrive | Double damage and faster fire for 8 s |
+| Magnet | Pulls nearby capsules to you for 14 s |
+
+Every upgrade kicks in **the moment you grab it**. Grabbing a timed one (Wingmen, Overdrive, Magnet) that's already running resets its timer to full.
 | Extra Ship | One more ship (rare, up to 5) |
 
 ### Inventory
 
-You can carry up to **10** weapons and stored upgrades. They show up as numbered slots in the middle of the bottom bar.
+Every weapon you collect goes into your inventory, which has up to **10** numbered slots in the middle of the bottom bar.
 
-- **Weapons:** switch whenever you like with **Q / E** (or the mouse wheel), or jump straight to a slot with **1–0**. Every weapon keeps its own ammo or time, and a timed weapon like Spread Shot only uses up its time while it's equipped.
-- **Stored upgrades** (Wingmen, Overdrive, Magnet) wait in their slot until you use them. Press the slot's number, or **F** to use the oldest one. Using one that's already running resets its timer to full.
-- **New pickups:** a new weapon is equipped automatically only if you're on the blaster. Otherwise it waits in its slot. Picking up something you already carry refills that slot.
-- **Full inventory:** a new kind of pickup replaces your emptiest slot. Your equipped weapon is never replaced.
+- **Switching:** change weapons whenever you like with **Q / E** (or the mouse wheel), or jump straight to a slot with **1–0**. Every weapon keeps its own ammo or time, and a timed weapon like Spread Shot only uses up its time while it's equipped.
+- **New weapons:** a new weapon is equipped automatically only if you're on the blaster. Otherwise it waits in its slot. Picking up a weapon you already carry refills that slot.
+- **Full inventory:** a new weapon replaces your emptiest slot. Your equipped weapon is never replaced.
 - **Losing a ship:** you lose the equipped weapon and any running upgrades. Everything else stays in your inventory.
 
 ### Controls
@@ -103,14 +112,23 @@ You can carry up to **10** weapons and stored upgrades. They show up as numbered
 | Space (hold) | Shoot |
 | Shift | **Shockwave**: a ring that clears all enemy bullets and hits hard enough to kill a Guardian. Takes 16 s to recharge. |
 | Q / E or mouse wheel | Previous / next weapon |
-| 1 … 0 | Equip the weapon, or use the upgrade, in that inventory slot |
-| F | Use the next stored upgrade |
+| 1 … 0 | Equip the weapon in that inventory slot |
 | P or Esc | Pause menu (Resume, Help, Restart run, Main menu, Quit) |
 | R | Play again after game over (Esc goes to the main menu) |
 
 ### Menus and help
 
-The game opens on a **main menu** (Play, Help, Quit). **Help** has six pages: Basics, Controls, Enemies, Bosses, Weapons and Upgrades. They cover every enemy, boss and power-up in the game. HP, ammo, durations and boss weapons are read straight from the config, so the help always matches the game. Use the arrow keys or click the tabs; Esc goes back. Help is also in the pause menu.
+The game opens on a **main menu**: Play, Leaderboard, Tutorial, Help and Quit (Quit is desktop only). **Help** has seven pages: Story, Basics, Controls, Enemies, Bosses, Weapons and Upgrades. They cover every enemy, boss and power-up in the game. HP, ammo, durations and boss weapons are read straight from the config, so the help always matches the game. Use the arrow keys or click the tabs; Esc goes back. Help is also in the pause menu.
+
+### Leaderboard
+
+When a run ends with a score, the game asks for a **pilot name** (a game name, up to 14 characters) and a **country**. Type to search the country list, then press Enter. Your score goes into the leaderboard, shown as **flag, name, then score** (plus the level reached). Your new entry is highlighted. The game remembers your last name and country for next time, and you can skip saving with Esc. You can also open the leaderboard from the main menu.
+
+Scores are kept in a small local database:
+- **Desktop:** a SQLite file at `save/alien_invasion.db` (ignored by git)
+- **Browser:** the page's `localStorage`, so it stays on that device and browser
+
+The 252 country flags are bundled with the game (`assets/flags/`, fetched once with `tools/fetch_flags.py` from flagcdn.com; national flags are public domain). Nothing is downloaded while you play. If the game is embedded on a website, it also tells the page about each saved score, so the site can keep a global leaderboard if it wants one.
 
 ## How to run it
 
@@ -134,7 +152,7 @@ python build_web.py --serve   # open http://localhost:8000
 python build_web.py           # just build into build/web/
 ```
 
-My portfolio page embeds this build. The game reports things like run started, score, hull, level and game over to the page, and the page can pause it or send touch controls. The page handles player names and the leaderboard, never the game. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
+My portfolio page embeds this build. The game reports things like run started, score, health, level, game over and saved leaderboard entries to the page. The page can pause the game or send touch controls. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
 
 ### Artwork
 
@@ -152,11 +170,13 @@ python -m pytest
 ```
 
 The tests check the important rules:
-- armor soaks damage before the hull, and shields block an exact number of hits
-- one burst can't chain damage, and 3 ships means 3 hull bars
+- armor soaks damage before health, and shields block an exact number of hits
+- one burst can't chain damage, and 3 ships means 3 health bars
 - every weapon actually damages things, and ammo, refills and time limits work
-- weapons can be switched with their ammo kept, upgrades stay stored until used, and a full inventory replaces the emptiest slot
+- weapons can be switched with their ammo kept, upgrades work instantly, and a full inventory replaces the emptiest slot
 - the menus, help pages, pause menu, restart and main menu all work by keyboard and mouse
+- Orbi's briefing freezes the game, shows only on your first run (or from Tutorial), and its tips appear once each
+- the leaderboard database (SQLite and in-memory) sorts and ranks scores and keeps settings; the name and flag entry saves correctly, and every country has a bundled flag
 - upgrades refresh and expire, missed capsules disappear, and the magnet and the drop guarantee work
 - the shockwave kills a Guardian and then recharges
 - bosses only take damage on their active weapons and always go through 3 stages
@@ -171,7 +191,7 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `player.speed` | 560 | How fast your ship flies |
-| `player.max_hull` / `start_lives` | 100 / 3 | Hull per ship / ships per run |
+| `player.max_health` / `start_lives` | 100 / 3 | Health per ship / ships per run |
 | `player.hurt_iframes` | 0.35 s | Grace time after taking a hit |
 | `player.blaster_cooldown` | 0.12 s | Basic fire rate |
 | `player.shock_recharge` / `shock_damage` | 16 s / 20 | Shockwave recharge time and damage |
@@ -195,11 +215,15 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 | `invasion/entities.py` | Ship, enemies, boss, shots, capsules |
 | `invasion/render.py` | Drawing, effects, HUD and menus |
 | `invasion/controls.py` | Keyboard plus virtual (touch) input |
-| `invasion/menu.py` | Main menu, pause menu and help navigation |
+| `invasion/menu.py` | Main menu, pause menu, help, pilot entry and leaderboard screens |
+| `invasion/guide.py` | Orbi's story briefing and first-run tips |
+| `invasion/storage.py` | Local leaderboard database (SQLite on desktop, localStorage in the browser) |
+| `invasion/countries.py` | Country list for the flag picker |
 | `invasion/codex.py` | Help text for every enemy, boss and power-up |
 | `invasion/app.py` | The window and the main loop |
 | `invasion/bridge.py` | Talks to the web page in the browser build (does nothing on desktop) |
 | `assets/images/` | Sprites (generated by `tools/make_art.py`) |
+| `assets/flags/` | Country flags + `countries.json` (fetched by `tools/fetch_flags.py`) |
 | `tools/make_art.py` | Draws all the sprites |
 | `build_web.py` | Builds the browser version |
 | `tests/` | Automated tests |
@@ -211,12 +235,12 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 - ✅ Aliens shoot back (front row only, with a limit on bullets so it stays fair)
 - ✅ Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
 - ✅ Big rework: random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
-- ✅ **10-slot inventory** to switch weapons and save upgrades for later, plus a main menu, pause menu and in-game help
+- ✅ 10-slot weapon inventory, a main menu, pause menu and in-game help
+- ✅ **Story mode:** Orbi the guide droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
 
 ## Ideas for what's next
 
 - Sound effects and music
-- Saving the high score between games
 - On-screen touch controls inside the game itself
 - A "2.5D" look: perspective starfield, banking ships, parallax layers
 - Recording inputs so a run's score can be replayed and verified

@@ -30,7 +30,7 @@
   <div class="hud">
     <span>Score: <b id="score">0</b></span>
     <span>Level: <b id="level">-</b></span>
-    <span>Hull: <b id="hull">-</b></span>
+    <span>Health: <b id="health">-</b></span>
     <span>Ships: <b id="lives">-</b></span>
     <button id="start" disabled>Start</button>
     <button id="pause">Pause</button>
@@ -45,7 +45,6 @@
     <button id="special">SHOCK</button>
     <button id="prev">◁ WPN</button>
     <button id="next">WPN ▷</button>
-    <button id="use">USE</button>
   </div>
 </div>
 <script>
@@ -64,14 +63,14 @@
       case "state":
         document.getElementById("score").textContent = ev.score;
         document.getElementById("level").textContent = ev.level;
-        document.getElementById("hull").textContent = ev.hull;
+        document.getElementById("health").textContent = ev.health;
         document.getElementById("lives").textContent = ev.lives;
         break;
-      case "game_over":
-        // The host decides what to do with the result, e.g. ask for a
-        // display name and submit {score, level, seed, run_id} to its own
-        // leaderboard service. The game never does this itself.
-        console.log("run finished", ev);
+      case "score_saved":
+        // The player saved a run to the game's local leaderboard (name +
+        // country flag). Submit it to your own global leaderboard here if
+        // you have one; the game never makes network calls itself.
+        console.log("score saved", ev);
         break;
     }
   });
@@ -98,7 +97,6 @@
   document.getElementById("special").onclick = () => send({ type: "special" });
   document.getElementById("prev").onclick = () => send({ type: "switch", direction: -1 });
   document.getElementById("next").onclick = () => send({ type: "switch", direction: 1 });
-  document.getElementById("use").onclick = () => send({ type: "activate" });
 </script>
 </body>
 </html>

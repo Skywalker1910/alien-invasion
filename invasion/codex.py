@@ -6,11 +6,11 @@ the help always matches the game.
 
 BASICS = [
     "Enemy squadrons swoop, stream and dive in. Shoot them before they shoot you.",
-    "Your ship has a HULL bar. ARMOR soaks damage first; each SHIELD charge blocks one hit.",
+    "Your ship has a HEALTH bar. ARMOR soaks damage first; each SHIELD charge blocks one hit.",
     "After a hit you flash briefly and can't be hurt again, so one burst can't wipe you out.",
-    "You have 3 ships. Hull at zero costs a ship; you lose the equipped weapon and active upgrades.",
+    "You have 3 ships. Health at zero costs a ship; you lose the equipped weapon and active upgrades.",
     "Wrecks drop capsules. Hexagons are weapons, circles are upgrades. Missed capsules are gone.",
-    "Weapons and timed upgrades go into your 10-slot inventory. Switch weapons any time.",
+    "Weapons go into your 10-slot inventory - switch any time. Upgrades work the moment you grab them.",
     "Levels 3, 6 and 10 are bosses. Hit their glowing weapons - the hull is armored.",
     "Chain kills quickly for a combo multiplier up to x5. Taking damage resets it.",
 ]
@@ -20,8 +20,7 @@ CONTROLS = [
     ("Space (hold)", "Shoot"),
     ("Shift", "Shockwave (recharges)"),
     ("Q / E  or  mouse wheel", "Previous / next weapon"),
-    ("1 ... 0", "Equip weapon / activate upgrade in that slot"),
-    ("F", "Activate the next stored upgrade"),
+    ("1 ... 0", "Equip the weapon in that inventory slot"),
     ("P / Esc", "Pause menu"),
     ("H", "Help (from a menu)"),
     ("R", "Play again after game over"),
@@ -60,13 +59,13 @@ WEAPONS = {
 }
 
 UPGRADES = {
-    "repair": "Restores hull instantly.",
+    "repair": "Restores health instantly.",
     "shield": "Blocks the next hits completely.",
-    "armor": "Extra plating that soaks damage before the hull.",
+    "armor": "Extra plating that soaks damage before your health.",
     "shock": "Instantly recharges your shockwave.",
-    "wingmen": "Two drones fly beside you and shoot. Stored - activate when you want.",
-    "overdrive": "Double damage and faster fire. Stored - activate when you want.",
-    "magnet": "Pulls nearby capsules to you. Stored - activate when you want.",
+    "wingmen": "Two drones fly beside you and shoot.",
+    "overdrive": "Double damage and faster fire.",
+    "magnet": "Pulls nearby capsules to you.",
     "life": "One more ship (rare).",
 }
 
@@ -80,7 +79,7 @@ def weapon_limit(spec):
 def upgrade_detail(kind, spec, cfg):
     pc = cfg.player
     if kind == "repair":
-        return f"+{spec.value:g} hull"
+        return f"+{spec.value:g} health"
     if kind == "shield":
         return f"{spec.value:g} hits (max {pc.max_shield})"
     if kind == "armor":

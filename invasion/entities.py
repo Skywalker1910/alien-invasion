@@ -22,11 +22,10 @@ class Body:
 
 
 class Slot:
-    """One inventory slot: a stored weapon or a stored timed upgrade."""
+    """One inventory slot: a stored weapon with its remaining ammo / time."""
 
-    def __init__(self, kind, category, ammo=0, time=0.0):
+    def __init__(self, kind, ammo=0, time=0.0):
         self.kind = kind
-        self.category = category        # "weapon" or "upgrade"
         self.ammo = ammo                # shots left (ammo weapons)
         self.time = time                # seconds left (timed weapons / upgrades)
 
@@ -34,16 +33,16 @@ class Slot:
 class Ship(Body):
     """The player's ship and everything it carries.
 
-    The inventory holds up to PlayerConfig.inventory_slots weapons and timed
-    upgrades. `selected` is the index of the equipped weapon slot, or None
-    for the basic blaster. It always points at a weapon slot.
+    The inventory holds up to PlayerConfig.inventory_slots weapons.
+    `selected` is the index of the equipped slot, or None for the basic
+    blaster.
     """
 
     def __init__(self, cfg):
         self.cfg = cfg
         pc = cfg.player
         super().__init__(cfg.display.width / 2, self.home_y(cfg), pc.size)
-        self.hull = pc.max_hull
+        self.health = pc.max_health
         self.armor = 0.0
         self.shield = 0                 # hits the shield can still block
         self.fire_timer = 0.0

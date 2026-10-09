@@ -5,29 +5,30 @@ of its randomness from one seeded random.Random, so the same seed plus the
 same inputs per step always produce the same run.
 
 Damage rules:
-  * the ship has a hull bar (100). Armor (up to 100) soaks damage first.
+  * the ship has a health bar (100). Armor (up to 100) soaks damage first.
     Shield charges block one hit each, completely.
-  * after any hull/armor damage the ship ignores damage for hurt_iframes
+  * after any health/armor damage the ship ignores damage for hurt_iframes
     seconds, so one collision or one burst can never chain into a wipe.
-  * hull at 0 costs a ship. 3 ships = 3 hull bars. After respawning the
-    ship blinks and is invulnerable for invulnerable_time.
+  * health at 0 costs a ship. 3 ships = 3 health bars. After respawning
+    the ship blinks and is invulnerable for invulnerable_time.
   * losing a ship loses the equipped weapon, active upgrades, shield and
     armor. The rest of the inventory and the shockwave charge are kept.
 
-Inventory rules (up to PlayerConfig.inventory_slots slots):
-  * weapons and timed upgrades (wingmen, overdrive, magnet) are stored.
-    Picking up something you already hold refills that slot instead.
+Inventory rules (weapons only, up to PlayerConfig.inventory_slots slots):
+  * every collected weapon is stored. Picking up a weapon you already hold
+    refills that slot instead.
   * a new weapon is equipped automatically only if you are on the blaster;
     otherwise it waits in its slot. Switch any time (cycle or by slot).
   * ammo weapons keep their shot count; timed weapons only use up time
     while equipped (the laser only while firing). An empty weapon leaves
     the inventory and the next weapon is equipped.
-  * stored upgrades do nothing until activated; then their timer runs.
-    Activating one that is already running refreshes it to full.
-  * when the inventory is full, a new kind replaces the emptiest slot
+  * when the inventory is full, a new weapon replaces the emptiest slot
     (never the equipped weapon).
-  * repair / armor / shield / shock charge / extra ship apply instantly
-    and stack up to their caps.
+
+Upgrade rules: every upgrade takes effect the moment it is collected.
+  * repair / armor / shield / shock charge / extra ship stack up to caps.
+  * wingmen / overdrive / magnet start their timer at once; collecting one
+    that is already running refreshes it to full.
   * pickups fall and are lost if they leave the bottom of the screen.
   * a new run starts with nothing but the blaster and a charged shockwave.
 """
@@ -40,7 +41,7 @@ from .config import Config
 from .entities import Boss, Enemy, EnemyShot, Hardpoint, Pickup, Ship, Shockwave, Shot, Slot
 from .levels import Spawn, build_wave, level_spec
 
-GAME_VERSION = "3.1.0"
+GAME_VERSION = "3.2.0"
 
 TITLE = "title"
 PLAYING = "playing"
@@ -57,8 +58,7 @@ class InputState:
     # Edge-triggered: applied to one step only.
     special: bool = False      # shockwave
     switch: int = 0            # -1 / +1: previous / next weapon
-    select: int = -1           # inventory slot to equip or activate (0-based)
-    activate: bool = False     # activate the oldest stored upgrade
+    select: int = -1           # inventory slot to equip (0-based)
 
 
 class Game:
@@ -172,7 +172,7 @@ class Game:
         """Feed real elapsed time; runs as many fixed steps as it covers.
 
         Returns the number of steps run. Edge-triggered input (special,
-        switch, select, activate) is only applied to the first step, so
+        switch, select) is only applied to the first step, so
         callers should clear it when this returns more than zero.
         """
         self._accumulator += min(frame_dt, 0.25)
@@ -180,7 +180,7 @@ class Game:
         limit = self.cfg.display.max_steps_per_frame
         while self._accumulator >= self.dt - 1e-9 and steps < limit:
             self.step(inp if steps == 0 else
-                      replace(inp, special=False, switch=0, select=-1, activate=False))
+                      replace(inp, special=False, switch=0, select=-1))
             self._accumulator -= self.dt
             steps += 1
         if steps == limit:
@@ -338,7 +338,7 @@ class Game:
                 ship.respawn_timer -= dt
                 if ship.respawn_timer <= 0:
                     ship.alive = True
-                    ship.hull = pc.max_hull
+                    ship.health = pc.max_health
                     ship.x, ship.y = self.cfg.display.width / 2, Ship.home_y(self.cfg)
                     ship.invulnerable_timer = pc.invulnerable_time
                     ship.fire_timer = 0.0
@@ -351,8 +351,6 @@ class Game:
             self.cycle_weapon(inp.switch)
         if inp.select >= 0:
             self.select_slot(inp.select)
-        if inp.activate:
-            self.activate_next_upgrade()
 
         for name in list(ship.buffs):
             ship.buffs[name] -= dt
@@ -388,20 +386,18 @@ class Game:
         slot = ship.remove_slot(index)
         ship.laser_on = False
         self.emit("weapon_empty", weapon=slot.kind)
-        weapons_left = [i for i, s in enumerate(ship.inventory) if s.category == "weapon"]
-        if weapons_left:
-            after = [i for i in weapons_left if i >= index]
-            ship.selected = after[0] if after else weapons_left[0]
+        if ship.inventory:
+            ship.selected = min(index, len(ship.inventory) - 1)
             self.emit("weapon_switched", weapon=ship.weapon, slot=ship.selected)
 
     # ------------------------------------------------------------------
     # Inventory
     # ------------------------------------------------------------------
     def cycle_weapon(self, direction):
-        """Step through blaster + stored weapons (upgrades are skipped)."""
+        """Step through the blaster and every stored weapon."""
         ship = self.ship
-        options = [None] + [i for i, s in enumerate(ship.inventory) if s.category == "weapon"]
-        current = options.index(ship.selected) if ship.selected in options else 0
+        options = [None] + list(range(len(ship.inventory)))
+        current = options.index(ship.selected)
         new = options[(current + (1 if direction > 0 else -1)) % len(options)]
         if new != ship.selected:
             ship.selected = new
@@ -409,34 +405,18 @@ class Game:
             self.emit("weapon_switched", weapon=ship.weapon or "blaster", slot=new)
 
     def select_slot(self, index):
-        """Number keys: equip a weapon slot or activate an upgrade slot."""
+        """Number keys: equip the weapon in that slot."""
         ship = self.ship
-        if not 0 <= index < len(ship.inventory):
-            return
-        slot = ship.inventory[index]
-        if slot.category == "upgrade":
-            self._activate(index)
-        elif ship.selected != index:
+        if 0 <= index < len(ship.inventory) and ship.selected != index:
             ship.selected = index
             ship.laser_on = False
-            self.emit("weapon_switched", weapon=slot.kind, slot=index)
+            self.emit("weapon_switched", weapon=ship.weapon, slot=index)
 
-    def activate_next_upgrade(self):
-        for i, slot in enumerate(self.ship.inventory):
-            if slot.category == "upgrade":
-                self._activate(i)
-                return
-
-    def _activate(self, index):
-        slot = self.ship.remove_slot(index)
-        self.ship.buffs[slot.kind] = self.cfg.pickups[slot.kind].duration
-        self.emit("upgrade_activated", kind=slot.kind)
-
-    def _store(self, kind, category):
-        """Put a weapon or timed upgrade into the inventory."""
+    def _store(self, kind):
+        """Put a collected weapon into the inventory."""
         ship, cfg = self.ship, self.cfg
-        spec = cfg.weapons[kind] if category == "weapon" else cfg.pickups[kind]
-        ammo = getattr(spec, "ammo", 0)
+        spec = cfg.weapons[kind]
+        ammo = spec.ammo
         index = ship.find(kind)
         if index is not None:
             slot = ship.inventory[index]
@@ -449,15 +429,13 @@ class Game:
             old = ship.remove_slot(index)
             self.emit("inventory_replaced", kind=old.kind, new=kind)
             result = "replaced"
-        ship.inventory.append(Slot(kind, category, ammo, spec.duration))
-        if category == "weapon" and ship.selected is None:
+        ship.inventory.append(Slot(kind, ammo, spec.duration))
+        if ship.selected is None:
             ship.selected = len(ship.inventory) - 1
             result = "equipped"
         return result
 
     def _slot_fill(self, slot):
-        if slot.category == "upgrade":
-            return 1.0
         spec = self.cfg.weapons[slot.kind]
         return slot.ammo / spec.ammo if spec.ammo else slot.time / spec.duration
 
@@ -482,21 +460,21 @@ class Game:
             return None
         soaked = min(ship.armor, amount)
         ship.armor -= soaked
-        ship.hull -= amount - soaked
+        ship.health -= amount - soaked
         ship.hurt_timer = pc.hurt_iframes
         self.combo = 0
         self.multiplier = 1
         self.combo_timer = 0.0
-        self.emit("player_damaged", x=ship.x, y=ship.y, amount=amount, hull=max(0.0, ship.hull),
+        self.emit("player_damaged", x=ship.x, y=ship.y, amount=amount, health=max(0.0, ship.health),
                   armor=ship.armor, cause=cause)
-        if ship.hull <= 0:
+        if ship.health <= 0:
             self._lose_life(cause)
         return "hit"
 
     def _lose_life(self, cause):
         ship = self.ship
         ship.alive = False
-        ship.hull = 0.0
+        ship.health = 0.0
         lost = None
         if ship.selected is not None:
             lost = ship.remove_slot(ship.selected).kind
@@ -740,8 +718,8 @@ class Game:
                 continue
             if kind == "shield" and ship.shield >= pc.max_shield:
                 continue
-            if kind == "repair" and ship.hull < pc.max_hull / 2:
-                weight *= dc.low_hull_repair_boost
+            if kind == "repair" and ship.health < pc.max_health / 2:
+                weight *= dc.low_health_repair_boost
             weights[kind] = weight
         for kind in cfg.weapons:
             weights[kind] = dc.weapon_weight
@@ -779,17 +757,14 @@ class Game:
         result = None
         if pickup.category == "weapon":
             label = cfg.weapons[kind].label
-            result = self._store(kind, "weapon")
-        elif cfg.pickups[kind].storable:
-            label = cfg.pickups[kind].label
-            result = self._store(kind, "upgrade")
+            result = self._store(kind)
         else:
             spec = cfg.pickups[kind]
             label = spec.label
             if kind == "repair":
-                if ship.hull >= pc.max_hull:
+                if ship.health >= pc.max_health:
                     bonus = cfg.drops.bonus_points
-                ship.hull = min(pc.max_hull, ship.hull + spec.value)
+                ship.health = min(pc.max_health, ship.health + spec.value)
             elif kind == "shield":
                 ship.shield = min(pc.max_shield, ship.shield + int(spec.value))
             elif kind == "armor":
@@ -801,6 +776,9 @@ class Game:
                     self.lives += 1
                 else:
                     bonus = cfg.drops.bonus_points * 4
+            else:                       # timed: wingmen / overdrive / magnet
+                result = "refreshed" if kind in ship.buffs else "activated"
+                ship.buffs[kind] = spec.duration
         self.score += bonus
         self.emit("pickup", kind=kind, category=pickup.category, label=label, x=pickup.x,
                   y=pickup.y, bonus=bonus, result=result)
@@ -1011,8 +989,8 @@ class Game:
             left, total = boss.stage_hp()
             boss_info = {"name": boss.label, "stage": boss.stage, "stages": boss.stages,
                          "stage_hp": round(left / total, 3) if total else 0}
-        inventory = [{"kind": s.kind, "category": s.category,
-                      "ammo": s.ammo if s.category == "weapon" and self.cfg.weapons[s.kind].ammo else None,
+        inventory = [{"kind": s.kind,
+                      "ammo": s.ammo if self.cfg.weapons[s.kind].ammo else None,
                       "time": round(s.time, 1) if s.time else None}
                      for s in ship.inventory]
         return {
@@ -1023,7 +1001,7 @@ class Game:
             "level": self.level,
             "wave": self.wave,
             "lives": self.lives,
-            "hull": round(max(0.0, ship.hull)),
+            "health": round(max(0.0, ship.health)),
             "armor": round(ship.armor),
             "shield": ship.shield,
             "weapon": weapon,

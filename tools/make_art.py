@@ -455,8 +455,53 @@ def icon(kind, color):
     return a.save(f"icon_{kind}")
 
 
+def heart():
+    a = Art(18, 16)
+    color, light = (255, 70, 100), (255, 170, 185)
+    a.circle(color, 0.3, 0.32, 4.6)
+    a.circle(color, 0.7, 0.32, 4.6)
+    a.poly(color, [(0.05, 0.42), (0.95, 0.42), (0.5, 0.98)])
+    a.circle(light, 0.26, 0.26, 1.5)
+    return a.save("icon_health")
+
+
+def unknown_flag():
+    a = Art(40, 27)
+    a.rect((70, 80, 110), 0.0, 0.0, 1.0, 1.0)
+    a.rect((110, 120, 150), 0.06, 0.08, 0.94, 0.92)
+    a.circle((230, 235, 255), 0.5, 0.5, 6, 2)
+    return a.save("flag_unknown")
+
+
+def orbi():
+    """Orbi, the guide droid: a floating sphere with a visor. The renderer
+    adds the halo ring, LED face, antenna light and thrusters."""
+    a = Art(72, 72)
+    shell, mid, dark = (235, 240, 250), (190, 200, 220), (110, 120, 150)
+    a.glow(0.5, 0.95, 14, (90, 220, 255), 0.6)
+    a.circle(dark, 0.5, 0.5, 31)
+    a.circle(mid, 0.5, 0.5, 29)
+    a.circle(shell, 0.46, 0.44, 25)
+    a.circle((255, 255, 255), 0.36, 0.3, 7)
+    # Accent bands in teal, and side thruster pods
+    a.ellipse((40, 180, 170), 0.1, 0.66, 0.9, 0.78)
+    a.ellipse(shell, 0.12, 0.6, 0.88, 0.72)
+    for x in (0.04, 0.96):
+        a.circle(dark, x, 0.55, 6)
+        a.circle((40, 180, 170), x, 0.55, 4)
+    # Visor (the face is drawn on it at runtime)
+    a.ellipse((20, 26, 44), 0.2, 0.3, 0.8, 0.6)
+    a.ellipse((50, 70, 110), 0.2, 0.3, 0.8, 0.6, 1)
+    # Antenna stalk (the tip light is drawn at runtime)
+    a.line(dark, (0.5, 0.06), (0.5, -0.1), 2)
+    return a.save("orbi")
+
+
 def main():
     pygame.init()
+    heart()
+    unknown_flag()
+    orbi()
     os.makedirs(OUT, exist_ok=True)
     cfg = Config()
     player(cfg)
