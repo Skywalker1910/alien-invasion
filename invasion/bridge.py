@@ -8,15 +8,17 @@ Game -> host: each event is a JSON object with a "type" field. It is
 delivered three ways so hosts can pick whichever fits:
   * window.dispatchEvent(new CustomEvent("alien-invasion", {detail}))
   * window.AlienInvasionBridge.onEvent(detail), if the host set it
-  * window.parent.postMessage({source: "alien-invasion", ...detail}, origin)
-    when the game runs inside an iframe. origin defaults to "*" and can be
-    pinned with the page's ?parentOrigin=https://example.com query string.
+  * window.parent.postMessage({source: "alien-invasion", ...detail}, parentOrigin)
+    when the game runs inside an iframe. parentOrigin is the page's
+    ?parentOrigin=https://example.com query parameter and defaults to the
+    game's own origin; events are never posted to "*".
 
 Host -> game: commands are JSON objects with a "type" field:
   * window.AlienInvasionBridge.send({type: "pause"})
   * or, from a parent page, iframe.contentWindow.postMessage(
-        {target: "alien-invasion", type: "pause"}, "*")
-    (only messages from the direct parent window are accepted)
+        {target: "alien-invasion", type: "pause"}, gameOrigin)
+    Only messages whose source is the direct parent window AND whose
+    origin equals parentOrigin are accepted; everything else is ignored.
 
 The bridge never sends names, credentials or anything to the network.
 """
@@ -30,7 +32,7 @@ _JS_SHIM = r"""
   if (window.AlienInvasionBridge) return;
   var params = new URLSearchParams(window.location.search);
   var bridge = {
-    parentOrigin: params.get("parentOrigin") || "*",
+    parentOrigin: params.get("parentOrigin") || window.location.origin,
     onEvent: null,
     _inbox: [],
     send: function (cmd) {
@@ -54,7 +56,7 @@ _JS_SHIM = r"""
   };
   window.addEventListener("message", function (e) {
     var d = e.data;
-    if (e.source === window.parent && d && d.target === "alien-invasion") bridge.send(d);
+    if (e.source === window.parent && e.origin === bridge.parentOrigin && d && d.target === "alien-invasion") bridge.send(d);
   });
   window.AlienInvasionBridge = bridge;
 })();
@@ -64,11 +66,12 @@ _JS_SHIM = r"""
 FORWARDED_EVENTS = {
     "run_started", "level_started", "wave_started", "level_cleared", "boss_spawned",
     "boss_stage", "boss_defeated", "player_destroyed", "pickup", "paused", "resumed",
-    "game_over",
+    "game_over", "run_abandoned", "weapon_switched",
 }
 
 # Commands the host may send. Anything else is ignored.
-COMMANDS = {"pause", "resume", "input", "special", "start", "restart"}
+COMMANDS = {"pause", "resume", "input", "special", "switch", "select", "start", "restart",
+            "skip_briefing"}
 
 
 class NullBridge:
@@ -147,10 +150,11 @@ def create_bridge():
 class StateReporter:
     """Sends a compact state event whenever it changes. Changes to lives,
     level, wave, pause or game state go out at once; fast-changing values
-    (score, hull, ammo, timers) at most every min_interval seconds."""
+    (score, health, ammo, timers) at most every min_interval seconds."""
 
     IMMEDIATE = ("state", "paused", "level", "wave", "lives", "run_id")
-    FIELDS = IMMEDIATE + ("score", "multiplier", "hull", "armor", "shield", "weapon", "buffs",
+    FIELDS = IMMEDIATE + ("score", "multiplier", "health", "armor", "shield", "weapon", "inventory",
+                          "selected", "buffs",
                           "shock", "boss")
 
     def __init__(self, bridge, min_interval=0.25):

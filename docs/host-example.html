@@ -30,7 +30,7 @@
   <div class="hud">
     <span>Score: <b id="score">0</b></span>
     <span>Level: <b id="level">-</b></span>
-    <span>Hull: <b id="hull">-</b></span>
+    <span>Health: <b id="health">-</b></span>
     <span>Ships: <b id="lives">-</b></span>
     <button id="start" disabled>Start</button>
     <button id="pause">Pause</button>
@@ -43,12 +43,17 @@
     <button data-btn="right">▶</button>
     <button data-btn="fire">FIRE</button>
     <button id="special">SHOCK</button>
+    <button id="prev">◁ WPN</button>
+    <button id="next">WPN ▷</button>
   </div>
 </div>
 <script>
   const frame = document.getElementById("game");
-  // Use the game's real origin instead of "*" once it is deployed.
-  const send = (cmd) => frame.contentWindow.postMessage({ target: "alien-invasion", ...cmd }, "*");
+  // The game only accepts commands from its direct parent whose origin matches
+  // the iframe's ?parentOrigin= (default: the game's own origin). Target the
+  // game's origin when posting; never "*".
+  const GAME_ORIGIN = new URL(frame.src, window.location.href).origin;
+  const send = (cmd) => frame.contentWindow.postMessage({ target: "alien-invasion", ...cmd }, GAME_ORIGIN);
 
   window.addEventListener("message", (e) => {
     if (e.source !== frame.contentWindow) return;
@@ -61,14 +66,14 @@
       case "state":
         document.getElementById("score").textContent = ev.score;
         document.getElementById("level").textContent = ev.level;
-        document.getElementById("hull").textContent = ev.hull;
+        document.getElementById("health").textContent = ev.health;
         document.getElementById("lives").textContent = ev.lives;
         break;
-      case "game_over":
-        // The host decides what to do with the result, e.g. ask for a
-        // display name and submit {score, level, seed, run_id} to its own
-        // leaderboard service. The game never does this itself.
-        console.log("run finished", ev);
+      case "score_saved":
+        // The player saved a run to the game's local leaderboard (name +
+        // country flag). Submit it to your own global leaderboard here if
+        // you have one; the game never makes network calls itself.
+        console.log("score saved", ev);
         break;
     }
   });
@@ -93,6 +98,8 @@
     btn.addEventListener("pointercancel", set(false));
   }
   document.getElementById("special").onclick = () => send({ type: "special" });
+  document.getElementById("prev").onclick = () => send({ type: "switch", direction: -1 });
+  document.getElementById("next").onclick = () => send({ type: "switch", direction: 1 });
 </script>
 </body>
 </html>

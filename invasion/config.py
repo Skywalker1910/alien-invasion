@@ -47,10 +47,11 @@ class PlayerConfig:
     hitbox_scale: float = 0.55         # forgiving hitbox, smaller than the sprite
     speed: float = 560.0
     top_zone: float = 0.52             # ship can fly up to this fraction of the screen
-    bottom_margin: int = 46            # room for the bottom HUD bar
-    max_hull: float = 100.0
+    bottom_margin: int = 58            # room for the bottom HUD bar
+    max_health: float = 100.0
     max_armor: float = 100.0
     max_shield: int = 10               # shield charges (each blocks one hit)
+    inventory_slots: int = 10          # weapons you can carry and switch between
     start_lives: int = 3
     max_lives: int = 5
     hurt_iframes: float = 0.35         # after taking damage, ignore damage this long
@@ -128,7 +129,7 @@ class PickupSpec:
 
 def default_pickups():
     return {
-        "repair": PickupSpec("Repair", GREEN, 16, value=35),           # +35 hull
+        "repair": PickupSpec("Repair", GREEN, 16, value=35),           # +35 health
         "shield": PickupSpec("Shield", CYAN, 12, value=6),              # blocks 6 hits
         "armor": PickupSpec("Armor", STEEL, 10, value=50),             # +50 armor
         "shock": PickupSpec("Shock Charge", WHITE, 7),                  # recharge shockwave
@@ -146,10 +147,10 @@ class DropConfig:
     fall_speed: float = 150.0
     sway: float = 22.0
     pity_time: float = 8.0             # no drop for this long -> next kill drops
-    low_hull_repair_boost: float = 2.5 # repair weight multiplier below half hull
+    low_health_repair_boost: float = 2.5  # repair drops more often below half health
     magnet_radius: float = 340.0
     magnet_speed: float = 620.0
-    bonus_points: int = 250            # e.g. repair at full hull
+    bonus_points: int = 250            # e.g. repair at full health
 
 
 @dataclass

@@ -9,16 +9,16 @@ The bridge is only active when the game runs in the browser
 (`sys.platform == "emscripten"`). On desktop it does nothing. If a call to the
 host fails, the bridge turns itself off and the game keeps running.
 
-## What the host owns
+## What the game keeps, and what the host can add
 
-The game only reports what happened. The host page is responsible for:
+The game keeps a **local leaderboard** itself. After a run, the player types a pilot name (a game name, up to 20 plain characters) and picks a country flag. The entry is stored in the browser's `localStorage` (or in SQLite on desktop), and the game sends a `score_saved` event.
 
-- player names, country selection and any sign-in
-- the public leaderboard and anything that writes to it
-- analytics, sharing and account features
+A host page can add things the game deliberately doesn't do:
 
-The game never asks for a real name, never stores credentials, and never makes
-network calls of its own.
+- a public, cross-device leaderboard: listen for `score_saved` (or `game_over`) and submit it to your own service
+- sign-in, analytics and sharing
+
+The game never stores credentials, never asks for a real name, and makes no network calls of its own.
 
 ## Building
 
@@ -49,9 +49,12 @@ The game always draws a fixed 960 × 640 logical playfield, and the canvas
 scales to fit whatever size you give it. It stays readable down to roughly
 480 × 320.
 
-`parentOrigin` is optional. When you set it, the game only posts events to that
-origin. Without it, events are posted with target origin `"*"`. They contain
-nothing sensitive, but pinning the origin is better practice.
+`parentOrigin` pins who the game talks to. Events are posted only to that
+origin, and commands are accepted only when they come from the direct parent
+window **and** `event.origin` equals `parentOrigin`. Without the parameter it
+defaults to the game's own origin, which suits a same-origin embed. A host on a
+different origin **must** pass its exact origin, or the game ignores its
+commands. The game never posts to `"*"`.
 
 `docs/host-example.html` is a complete working host page with a score display,
 start/pause buttons and on-screen touch controls.
@@ -69,14 +72,18 @@ ways:
 | --- | --- | --- |
 | `ready` | the game loaded and is showing the title screen | `version`, `width`, `height` |
 | `run_started` | a new run began | `run_id`, `seed`, `version` |
-| `state` | something on the HUD changed. Lives, level, wave, pause and game state go out at once; score, hull, ammo and timers at most every 0.25 s | `state` (`title` / `playing` / `game_over`), `paused`, `score`, `multiplier`, `level`, `wave`, `lives`, `hull`, `armor`, `shield` (hits left), `weapon` (`{name, ammo, time}` or `null`), `buffs` (`{kind: seconds_left}`), `shock` (0–1 charge), `boss` (`{name, stage, stages, stage_hp}` or `null`), `run_id` |
+| `state` | something on the HUD changed. Lives, level, wave, pause and game state go out at once; score, hull, ammo and timers at most every 0.25 s | `state` (`title` / `playing` / `game_over`), `paused`, `score`, `multiplier`, `level`, `wave`, `lives`, `health`, `armor`, `shield` (hits left), `weapon` (`{name, ammo, time}` or `null`), `inventory` (list of `{kind, ammo, time}`, weapons only), `selected` (index of the equipped slot or `null`), `buffs` (`{kind: seconds_left}`), `shock` (0–1 charge), `boss` (`{name, stage, stages, stage_hp}` or `null`), `run_id` |
 | `level_started` | a level (or boss level) begins | `level`, `name`, `boss`, `hint`, `theme` |
 | `wave_started` | a new wave of a normal level begins | `level`, `wave`, `waves` |
 | `level_cleared` | the level is done (all waves or the boss) | `level`, `bonus` |
 | `boss_spawned` / `boss_stage` / `boss_defeated` | boss fight starts / reaches stage 2 or 3 / ends | `name`, `stages` / `stage`, `stages` / `points`, `level` |
 | `player_destroyed` | the player lost a ship | `lives`, `cause` (`bullet`, `orb`, `bolt`, `missile`, `beam`, `ram`, `mine`) |
 | `pickup` | a capsule was collected | `kind`, `category` (`weapon` / `utility`), `label`, `bonus` |
+| `weapon_switched` | the player changed weapon | `weapon`, `slot` |
+| `briefing_started` / `briefing_finished` | BB-8's story briefing opened / was finished or skipped (the game is frozen in between) | |
+| `score_saved` | the player saved a run to the local leaderboard | `name`, `country` (ISO code or empty), `score`, `level`, `run_id`, `seed`, `rank` (local) |
 | `paused` / `resumed` | pause state changed (keyboard, focus or host) | |
+| `run_abandoned` | the player left a run from the pause menu (Restart run / Main menu). Not a finished run: don't submit it. | `run_id`, `score`, `level` |
 | `game_over` | the run ended. **Sent exactly once per run.** | `run_id`, `seed`, `score`, `level`, `wave`, `kills`, `ticks`, `duration`, `version` |
 
 `run_id` is `"<seed>-<run number>"`. The simulation runs at a fixed 60 steps
@@ -91,14 +98,18 @@ Send commands either with
 `iframe.contentWindow.postMessage({target: "alien-invasion", type, ...}, gameOrigin)`
 from the parent page (the game only accepts these from its direct parent), or
 with `window.AlienInvasionBridge.send({type, ...})` from inside the game page.
+Parent messages must come from the configured `parentOrigin` (see Embedding).
 
 | type | effect |
 | --- | --- |
-| `start` | start a run from the title or game-over screen. Optional integer `seed`. |
+| `start` | start a run from the main menu or game-over screen (closes the menu). Optional integer `seed`. |
 | `restart` | same as pressing R. Only works on the game-over screen. Optional `seed`. |
-| `pause` / `resume` | pause or resume a run in progress (e.g. on `visibilitychange`) |
+| `pause` / `resume` | pause (opens the pause menu) or resume a run in progress, e.g. on `visibilitychange` |
 | `input` | virtual buttons for touch controls: any of `left`, `right`, `up`, `down`, `fire` as booleans. Values you leave out keep their previous state. They are combined (OR) with the keyboard. |
 | `special` | fire the shockwave if it is charged (like pressing Shift) |
+| `switch` | previous / next weapon: `direction` -1 or 1 (like Q / E) |
+| `select` | equip the weapon in inventory `slot` (0–9, like keys 1–0) |
+| `skip_briefing` | close BB-8's briefing (like Esc) |
 
 Unknown commands are ignored.
 

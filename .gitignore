@@ -174,3 +174,5 @@ Desktop.ini
 saves/
 screenshots/
 *.save
+# Local save data (leaderboard database)
+save/
