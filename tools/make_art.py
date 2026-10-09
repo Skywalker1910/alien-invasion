@@ -473,28 +473,75 @@ def unknown_flag():
     return a.save("flag_unknown")
 
 
+ORANGE_BB = (240, 128, 40)
+
+
+def _mask_circle(art, cx=0.5, cy=0.5, r=0.5):
+    """Keep only what lies inside a circle (normalized units)."""
+    mask = pygame.Surface(art.surf.get_size(), pygame.SRCALPHA)
+    pygame.draw.circle(mask, (255, 255, 255, 255), art.p(cx, cy), r * art.w * SS)
+    art.surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+
+
 def orbi():
-    """Orbi, the guide droid: a floating sphere with a visor. The renderer
-    adds the halo ring, LED face, antenna light and thrusters."""
-    a = Art(72, 72)
-    shell, mid, dark = (235, 240, 250), (190, 200, 220), (110, 120, 150)
-    a.glow(0.5, 0.95, 14, (90, 220, 255), 0.6)
-    a.circle(dark, 0.5, 0.5, 31)
-    a.circle(mid, 0.5, 0.5, 29)
-    a.circle(shell, 0.46, 0.44, 25)
-    a.circle((255, 255, 255), 0.36, 0.3, 7)
-    # Accent bands in teal, and side thruster pods
-    a.ellipse((40, 180, 170), 0.1, 0.66, 0.9, 0.78)
-    a.ellipse(shell, 0.12, 0.6, 0.88, 0.72)
-    for x in (0.04, 0.96):
-        a.circle(dark, x, 0.55, 6)
-        a.circle((40, 180, 170), x, 0.55, 4)
-    # Visor (the face is drawn on it at runtime)
-    a.ellipse((20, 26, 44), 0.2, 0.3, 0.8, 0.6)
-    a.ellipse((50, 70, 110), 0.2, 0.3, 0.8, 0.6, 1)
-    # Antenna stalk (the tip light is drawn at runtime)
-    a.line(dark, (0.5, 0.06), (0.5, -0.1), 2)
-    return a.save("orbi")
+    """Orbi, the co-pilot droid: a white rolling ball with orange ring panels
+    and a domed head, matching the portfolio's co-pilot assistant. Three
+    sprites: the body pattern (rotated at runtime so it rolls), a fixed
+    shading overlay, and the head (kept upright on top)."""
+    # Body pattern
+    a = Art(80, 80)
+    white, grey, orange = (244, 244, 248), (175, 178, 190), ORANGE_BB
+    a.circle(white, 0.5, 0.5, 40)
+    # Side panels, partly wrapping round the ball
+    for cx, cy in ((0.02, 0.18), (1.0, 0.2), (0.06, 0.98), (0.98, 0.94)):
+        a.circle(orange, cx, cy, 15, 3)
+        a.circle(grey, cx, cy, 8, 1)
+    for (x0, y0), (x1, y1) in (((0.16, 0.42), (0.3, 0.28)), ((0.7, 0.28), (0.84, 0.42)),
+                               ((0.18, 0.74), (0.3, 0.86)), ((0.7, 0.86), (0.82, 0.74))):
+        a.line(orange, (x0, y0), (x1, y1), 2.2)
+    for y in (0.12, 0.88):
+        a.line(grey, (0.38, y), (0.62, y), 1)
+    # Main panel: orange ring, white gap, inner orange ring with spokes
+    a.circle(orange, 0.5, 0.52, 23)
+    a.circle(white, 0.5, 0.52, 18.5)
+    a.circle(orange, 0.5, 0.52, 12)
+    a.circle(white, 0.5, 0.52, 8)
+    for k in range(4):
+        ang = math.pi / 4 + k * math.pi / 2
+        a.line(orange, (0.5 + math.cos(ang) * 0.1, 0.52 + math.sin(ang) * 0.1),
+               (0.5 + math.cos(ang) * 0.24, 0.52 + math.sin(ang) * 0.24), 2.6)
+    a.circle(grey, 0.5, 0.52, 3.2)
+    _mask_circle(a)
+    a.circle((205, 208, 218), 0.5, 0.5, 40, 1)
+    a.save("orbi_body")
+
+    # Fixed shading: a soft shadow crescent bottom-right and a highlight
+    s = Art(80, 80)
+    s.circle((70, 74, 96, 95), 0.5, 0.5, 40)
+    s.circle((0, 0, 0, 0), 0.42, 0.4, 37)
+    s.ellipse((255, 255, 255, 110), 0.2, 0.12, 0.5, 0.34)
+    _mask_circle(s)
+    s.save("orbi_shade")
+
+    # Head: white dome, orange band, dark bottom rim, big lens + small lens
+    h = Art(54, 34)
+    h.ellipse(white, 0.02, 0.04, 0.98, 1.9)
+    h.rect(orange, 0.0, 0.46, 1.0, 0.56)
+    for x in (0.22, 0.34, 0.46, 0.58, 0.7, 0.82):
+        h.circle((255, 220, 170), x, 0.51, 1.3)
+    h.rect(grey, 0.0, 0.7, 1.0, 0.78)
+    h.rect((95, 98, 112), 0.0, 0.78, 1.0, 1.0)
+    h.rect((0, 0, 0, 0), 0.0, 0.92, 1.0, 1.0)
+    mask = pygame.Surface(h.surf.get_size(), pygame.SRCALPHA)
+    pygame.draw.ellipse(mask, (255, 255, 255, 255), pygame.Rect(*h.p(0.02, 0.04), 0.96 * h.w * SS, 1.86 * h.h * SS))
+    h.surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    h.circle((40, 42, 52), 0.4, 0.34, 6.2)
+    h.circle((15, 16, 22), 0.4, 0.34, 4.6)
+    h.circle((120, 125, 140), 0.4, 0.34, 4.6, 1)
+    h.circle((230, 235, 255), 0.37, 0.29, 1.4)
+    h.circle((30, 32, 40), 0.64, 0.38, 2.4)
+    h.ellipse((255, 255, 255, 120), 0.18, 0.08, 0.52, 0.22)
+    h.save("orbi_head")
 
 
 def main():

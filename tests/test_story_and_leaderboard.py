@@ -209,3 +209,30 @@ def test_entry_form_keyboard_editing():
     key(pygame.K_DOWN)
     assert key(pygame.K_RETURN) == "save" and form.country == "in"
     assert key(pygame.K_ESCAPE) == "skip"
+
+
+def test_tips_queue_instead_of_overlapping():
+    guide = Guide()
+    guide.start()
+    guide.skip()
+    guide.on_events([{"type": "pickup_dropped"}, {"type": "player_damaged"}])
+    first = guide.tip
+    assert "capsule" in first.lower() and len(guide.queue) == 1
+    guide.update(4.6)                              # first tip times out
+    guide.update(0.01)
+    assert guide.tip != first and "health" in guide.tip.lower()
+
+
+def test_tips_stay_inside_the_top_hud_bar():
+    app = make_app()
+    press(app, pygame.K_RETURN)
+    app.guide.tips_enabled = True
+    app.guide.show_tip("capsule", "A capsule! Fly into it before it falls past you.")
+    for _ in range(30):
+        app.frame(1 / 60)
+    hud = pygame.Rect(0, 0, app.cfg.display.width, app.cfg.display.hud_height)
+    # Draw the comms line on a clean surface and check where pixels landed.
+    surf = pygame.Surface((app.cfg.display.width, app.cfg.display.height), pygame.SRCALPHA)
+    app.renderer._draw_comms(surf, app.guide)
+    bounds = surf.get_bounding_rect()
+    assert bounds.width > 0 and hud.contains(bounds)

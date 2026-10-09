@@ -108,7 +108,7 @@ class Renderer:
         self.ship_img = load_image("player")
         self.life_icon = pygame.transform.smoothscale(self.ship_img, (14, 16))
         self.heart = load_image("icon_health")
-        self.orbi_img = load_image("orbi")
+        self.orbi_parts = {name: load_image(f"orbi_{name}") for name in ("body", "shade", "head")}
         self._flags = {}
         self.heart_big = pygame.transform.smoothscale(self.heart, (22, 20))
         self.wingman_img = load_image("wingman")
@@ -365,7 +365,7 @@ class Renderer:
         else:
             self._draw_banner(target, game)
             if guide and guide.tip and not game.paused:
-                self._draw_tip(target, guide)
+                self._draw_comms(target, guide)
         if screen == PAUSE:
             self._draw_pause_menu(target, menu)
         elif screen == HELP:
@@ -937,7 +937,8 @@ class Renderer:
 
     def _help_story(self, surf, area):
         from .guide import STORY
-        self.draw_orbi(surf, area.x + 70, area.y + 110, 1.2, self.time, talking=False)
+        self.draw_orbi(surf, area.x + 70, area.y + 130, 1.3, self.time, roll=8 * math.sin(self.time), 
+                       lean=0.2 * math.sin(self.time))
         y = area.y + 4
         for title, text in STORY[:4]:
             self.blit_text(surf, title.upper(), 24, YELLOW, topleft=(area.x + 170, y))
@@ -1058,63 +1059,51 @@ class Renderer:
     # ------------------------------------------------------------------
     # Orbi the guide droid
     # ------------------------------------------------------------------
-    def draw_orbi(self, surf, x, y, scale, t, talking=False, look=1):
-        key = ("orbi", round(scale * 20))
-        body = self._glows.get(key)
-        if body is None:
-            w, h = self.orbi_img.get_size()
-            body = pygame.transform.smoothscale(self.orbi_img, (int(w * scale), int(h * scale)))
-            self._glows[key] = body
-        bw, bh = body.get_size()
-        y += 5 * scale * math.sin(t * 2.4)
-        x, y = round(x), round(y)
-        r = bw / 2
-        # Thrusters and the halo ring behind the body
-        self.add_glow(surf, x, y + r * 0.95, (90, 220, 255), int(12 * scale + 3 * math.sin(t * 20)) + 6)
-        ring = pygame.Rect(0, 0, int(r * 2.7), int(r * 0.62))
-        ring.center = (x, int(y + r * 0.18))
-        lights = [(t * 1.6 + i * math.tau / 6) for i in range(6)]
-        pygame.draw.ellipse(surf, (50, 120, 150), ring, max(1, int(2 * scale)))
-        for a in lights:
-            if math.sin(a) <= 0:
-                pygame.draw.circle(surf, (90, 160, 190), (ring.centerx + math.cos(a) * ring.w / 2,
-                                                         ring.centery + math.sin(a) * ring.h / 2), 2 * scale)
+    def _orbi_scaled(self, name, scale):
+        key = ("orbi", name, round(scale * 40))
+        img = self._glows.get(key)
+        if img is None:
+            src = self.orbi_parts[name]
+            img = pygame.transform.smoothscale(src, (round(src.get_width() * scale),
+                                                     round(src.get_height() * scale)))
+            self._glows[key] = img
+        return img
+
+    def draw_orbi_head(self, surf, midbottom, scale, t, talking=False, lean=0.0):
+        """Orbi's domed head with its antenna, blinking eye and talk light."""
+        head = self._orbi_scaled("head", scale)
+        if lean:
+            head = pygame.transform.rotate(head, -lean * 12)
+        rect = head.get_rect(midbottom=(round(midbottom[0]), round(midbottom[1])))
+        hw, hh = self.orbi_parts["head"].get_size()
         # Antenna
-        top = y - bh / 2
-        pygame.draw.line(surf, (110, 120, 150), (x, top + 4 * scale), (x + 3 * scale, top - 12 * scale),
-                         max(1, int(2 * scale)))
-        on = int(t * 3) % 2 == 0
-        tip = (x + 3 * scale, top - 13 * scale)
+        base = (rect.centerx - 0.14 * hw * scale, rect.top + 0.1 * hh * scale)
+        tip = (base[0] + 1.5 * scale, base[1] - 13 * scale)
+        pygame.draw.line(surf, (120, 124, 140), base, tip, max(1, round(1.5 * scale)))
+        surf.blit(head, rect)
+        on = talking and int(t * 6) % 2 == 0
+        pygame.draw.circle(surf, (255, 150, 60) if on else (190, 195, 210), tip, max(1.5, 2 * scale))
         if on:
-            self.add_glow(surf, tip[0], tip[1], (255, 90, 90), int(8 * scale))
-        pygame.draw.circle(surf, (255, 110, 110) if on else (140, 60, 60), tip, 3 * scale)
-        surf.blit(body, body.get_rect(center=(x, y)))
-        # Front of the halo ring, over the body
-        pygame.draw.arc(surf, (120, 230, 255), ring, math.pi, math.tau, max(1, int(3 * scale)))
-        for a in lights:
-            if math.sin(a) > 0:
-                p = (ring.centerx + math.cos(a) * ring.w / 2, ring.centery + math.sin(a) * ring.h / 2)
-                self.add_glow(surf, p[0], p[1], (120, 230, 255), int(6 * scale))
-                pygame.draw.circle(surf, (230, 255, 255), p, 2.2 * scale)
-        # LED face on the visor
-        face_y = y - 0.05 * bh
-        blink = (t % 3.4) < 0.13
-        eye_w, eye_h = 0.075 * bw, (0.02 if blink else 0.11) * bh
-        for side in (-1, 1):
-            ex = x + side * 0.13 * bw + look * 2 * scale
-            rect = pygame.Rect(0, 0, int(eye_w), max(2, int(eye_h)))
-            rect.center = (round(ex), round(face_y - 0.02 * bh))
-            pygame.draw.rect(surf, (110, 240, 255), rect, border_radius=int(3 * scale))
-        if talking:
-            for i in range(5):
-                hgt = (1.2 + abs(math.sin(t * 17 + i * 1.3)) * 3.2) * scale
-                bx = x + (i - 2) * 4.2 * scale + look * 2 * scale
-                pygame.draw.line(surf, (110, 240, 255), (bx, face_y + 0.1 * bh - hgt),
-                                 (bx, face_y + 0.1 * bh + hgt), max(1, int(2 * scale)))
-        else:
-            pygame.draw.arc(surf, (110, 240, 255), pygame.Rect(x - 6 * scale + look * 2 * scale,
-                            face_y + 0.04 * bh, 12 * scale, 7 * scale), math.pi * 1.1, math.pi * 1.9,
-                            max(1, int(2 * scale)))
+            self.add_glow(surf, tip[0], tip[1], (255, 140, 50), round(6 * scale) + 2)
+        # Eye blink and the small "talk" lens
+        if (t % 3.6) < 0.14:
+            pygame.draw.circle(surf, (236, 238, 245), (rect.x + 0.4 * rect.w, rect.y + 0.34 * rect.h), 6.4 * scale)
+            pygame.draw.line(surf, (60, 62, 74), (rect.x + 0.4 * rect.w - 5 * scale, rect.y + 0.34 * rect.h),
+                             (rect.x + 0.4 * rect.w + 5 * scale, rect.y + 0.34 * rect.h), max(1, round(scale)))
+        if talking and int(t * 9) % 3:
+            self.add_glow(surf, rect.x + 0.64 * rect.w, rect.y + 0.38 * rect.h, (255, 120, 40), round(5 * scale) + 2)
+        return rect
+
+    def draw_orbi(self, surf, x, y, scale, t, talking=False, roll=0.0, lean=0.0):
+        """Orbi at body center (x, y): the ball rolls (roll = degrees), the
+        head stays upright on top and leans a little with the motion."""
+        d = self.orbi_parts["body"].get_width() * scale
+        self.add_glow(surf, x, y + d * 0.46, (255, 140, 60), round(16 * scale) + 4)
+        body = pygame.transform.rotozoom(self.orbi_parts["body"], roll, scale)
+        surf.blit(body, body.get_rect(center=(round(x), round(y))))
+        shade = self._orbi_scaled("shade", scale)
+        surf.blit(shade, shade.get_rect(center=(round(x), round(y))))
+        self.draw_orbi_head(surf, (x + lean * 5 * scale, y - d * 0.44), scale, t, talking, lean)
 
     def _bubble_box(self, surf, rect, tail_to=None):
         if tail_to:
@@ -1122,46 +1111,61 @@ class Renderer:
             base_y = min(max(ty, rect.top + 20), rect.bottom - 20)
             pygame.draw.polygon(surf, (16, 22, 48), [(rect.left + 2, base_y - 12), (rect.left + 2, base_y + 12),
                                                      (tx, ty)])
-            pygame.draw.lines(surf, (90, 220, 255), False, [(rect.left, base_y - 12), (tx, ty),
+            pygame.draw.lines(surf, ORANGE, False, [(rect.left, base_y - 12), (tx, ty),
                                                             (rect.left, base_y + 12)], 2)
         pygame.draw.rect(surf, (16, 22, 48), rect, border_radius=14)
-        pygame.draw.rect(surf, (90, 220, 255), rect, 2, border_radius=14)
+        pygame.draw.rect(surf, ORANGE, rect, 2, border_radius=14)
 
     def _draw_briefing(self, surf, guide):
-        self._dim(surf, 120)
+        """Before play starts Orbi gets the stage: it rolls in and talks."""
         from .guide import STORY
-        ox = -90 + 230 * guide.enter
-        oy = self.height - 250
-        self.draw_orbi(surf, ox, oy, 1.6, guide.t, talking=guide.typing, look=1)
-        box = pygame.Rect(260, self.height - 370, 650, 220)
-        self._bubble_box(surf, box, (ox + 70, oy - 20))
-        self.blit_text(surf, "ORBI", 22, (90, 220, 255), topleft=(box.x + 20, box.y + 14))
-        self.blit_text(surf, guide.title.upper(), 30, YELLOW, topleft=(box.x + 78, box.y + 10))
-        shown = guide.text[:int(guide.chars)]
-        y = box.y + 52
-        for line in self.wrap(shown, 28, box.w - 40):
-            self.blit_text(surf, line, 28, TEXT, topleft=(box.x + 20, y))
-            y += 30
-        for i in range(len(STORY)):
-            color = YELLOW if i == guide.page else (60, 70, 110)
-            pygame.draw.circle(surf, color, (box.x + 26 + i * 16, box.bottom - 22), 5)
-        hint = "Space / Enter: next   ·   Left: back   ·   Esc: skip"
-        if not guide.typing and int(guide.t * 2) % 2 == 0 and guide.page == len(STORY) - 1:
-            hint = "Space / Enter: start the mission!"
-        self.blit_text(surf, hint, 19, DIM, midright=(box.right - 20, box.bottom - 22))
+        self._dim(surf, 150)
+        scale = 1.9
+        radius = 40 * scale
+        ease = 1 - (1 - guide.enter) ** 3
+        start_x, end_x = -radius * 2, 175
+        ox = start_x + (end_x - start_x) * ease
+        oy = self.height - 200
+        rock = math.sin(guide.t * 1.7)
+        roll = -math.degrees((ox - start_x) / radius) + 7 * rock * ease
+        self.draw_orbi(surf, ox, oy, scale, guide.t, talking=guide.typing, roll=roll,
+                       lean=0.6 * (1 - ease) + 0.2 * rock * ease)
 
-    def _draw_tip(self, surf, guide):
-        k = min(1.0, guide.tip_timer / 0.3, (4.5 - guide.tip_timer) / 0.3)
-        ox = 50 - 90 * (1 - k)
-        oy = self.height - 150
-        self.draw_orbi(surf, ox, oy, 0.75, guide.t, talking=True, look=1)
-        lines = self.wrap(guide.tip, 22, 380)
-        w = max(self.font(22).size(line)[0] for line in lines) + 30
-        box = pygame.Rect(100, oy - 30 - 11 * len(lines), w, 22 * len(lines) + 20)
-        if k > 0.5:
-            self._bubble_box(surf, box, (ox + 30, oy))
-            for i, line in enumerate(lines):
-                self.blit_text(surf, line, 22, TEXT, topleft=(box.x + 15, box.y + 10 + i * 22))
+        box = pygame.Rect(320, 110, 600, 300)
+        self._bubble_box(surf, box, (ox + 70, oy - 110))
+        self.blit_text(surf, "ORBI  ·  CO-PILOT", 20, ORANGE, topleft=(box.x + 22, box.y + 16))
+        self.blit_text(surf, guide.title.upper(), 36, YELLOW, topleft=(box.x + 22, box.y + 40))
+        shown = guide.text[:int(guide.chars)]
+        y = box.y + 90
+        for line in self.wrap(shown, 30, box.w - 44):
+            self.blit_text(surf, line, 30, TEXT, topleft=(box.x + 22, y))
+            y += 32
+        for i in range(len(STORY)):
+            color = ORANGE if i == guide.page else (60, 70, 110)
+            pygame.draw.circle(surf, color, (box.x + 28 + i * 18, box.bottom - 24), 5)
+        hint = "Space / Enter: next   ·   Left: back   ·   Esc: skip"
+        if not guide.typing and guide.page == len(STORY) - 1:
+            hint = "Space / Enter: start the mission!"
+        self.blit_text(surf, hint, 19, DIM, midright=(box.right - 22, box.bottom - 24))
+
+    def _draw_comms(self, surf, guide):
+        """During play Orbi stays off the playfield: its tips appear as a
+        co-pilot comms line inside the top HUD bar."""
+        top_h = self.cfg.display.hud_height
+        shown = guide.tip_timer
+        slide = min(1.0, (4.5 - shown) / 0.2, shown / 0.2)
+        if slide <= 0:
+            return
+        rect = pygame.Rect(0, 0, 470, top_h - 6)
+        rect.center = (self.width // 2, top_h // 2 - round((1 - slide) * top_h))
+        pygame.draw.rect(surf, (22, 26, 52), rect, border_radius=8)
+        pygame.draw.rect(surf, ORANGE, rect, 1, border_radius=8)
+        self.draw_orbi_head(surf, (rect.x + 22, rect.bottom - 2), 0.52, guide.t, talking=True)
+        text = guide.tip
+        size = 20
+        while self.font(size).size(text)[0] > rect.w - 60 and size > 15:
+            size -= 1
+        self.blit_text(surf, text, size, TEXT, midleft=(rect.x + 44, rect.centery))
 
     # ------------------------------------------------------------------
     # Leaderboard and pilot entry

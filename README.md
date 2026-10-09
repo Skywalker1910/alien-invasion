@@ -18,9 +18,9 @@ Every change goes in as its own commit, so the git history shows how the game gr
 
 *Year 2387.* The **Aurora Gate** is humanity's last hyperspace gate, and every colony ship comes home through it. The **Vex Armada** wants it dark: its swarms and three motherships are already crossing the Outer Rim. You fly the **Starling**, the only fighter left at the gate. Hold the line through ten sectors and take down their motherships.
 
-The first time you play, **Orbi**, your flight droid, flies in at the start of level 1. Orbi tells you the story and walks you through the controls. Press Space or Enter to go on, Left to go back, or Esc to skip. The game waits until Orbi is done. After that, Orbi pops up with a one-time tip the first time something new happens: your first capsule, first stored weapon, first hit, first boss, and so on. You can replay the briefing any time with **Tutorial** on the main menu.
+The first time you play, **Orbi**, your co-pilot droid, rolls in at the start of level 1. It's styled to match the co-pilot assistant on my portfolio: a white rolling ball with orange ring panels and a domed head. Orbi tells you the story and walks you through the controls. The game waits until Orbi is done, so it can use the whole screen. Press Space or Enter to go on, Left to go back, or Esc to skip.
 
-(Orbi is an original character I designed for this game, a floating guide droid with a halo ring and an LED face.)
+During play, Orbi never covers the action. Its one-time tips (first capsule, first stored weapon, first hit, first boss, and so on) show up one after another as a **co-pilot comms line in the top bar**, with a small Orbi head next to the text. You can replay the briefing any time with **Tutorial** on the main menu.
 
 ## How to play
 
@@ -175,7 +175,7 @@ The tests check the important rules:
 - every weapon actually damages things, and ammo, refills and time limits work
 - weapons can be switched with their ammo kept, upgrades work instantly, and a full inventory replaces the emptiest slot
 - the menus, help pages, pause menu, restart and main menu all work by keyboard and mouse
-- Orbi's briefing freezes the game, shows only on your first run (or from Tutorial), and its tips appear once each
+- Orbi's briefing freezes the game and shows only on your first run (or from Tutorial); its tips appear once each, queue up instead of overlapping, and stay inside the top bar
 - the leaderboard database (SQLite and in-memory) sorts and ranks scores and keeps settings; the name and flag entry saves correctly, and every country has a bundled flag
 - upgrades refresh and expire, missed capsules disappear, and the magnet and the drop guarantee work
 - the shockwave kills a Guardian and then recharges
@@ -236,7 +236,7 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 - ✅ Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
 - ✅ Big rework: random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
 - ✅ 10-slot weapon inventory, a main menu, pause menu and in-game help
-- ✅ **Story mode:** Orbi the guide droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
+- ✅ **Story mode:** Orbi the co-pilot droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
 
 ## Ideas for what's next
 

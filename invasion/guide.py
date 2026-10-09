@@ -1,15 +1,16 @@
-"""Orbi, the guide droid: the story briefing and first-run tips.
+"""Orbi, the co-pilot droid: the story briefing and first-run tips.
 
 On a player's first run (or when they pick Tutorial from the menu) Orbi
-flies in at the start of level 1, tells the story and explains the
-controls. The game is frozen while the briefing is open. Afterwards Orbi
-pops up with short, one-time tips the first time something new happens.
+rolls in at the start of level 1, tells the story and explains the
+controls. The game is frozen while the briefing is open, so Orbi can take
+the whole screen. During play Orbi never covers the action: its one-time
+tips appear one after another as a comms line in the top HUD bar.
 
 This is UI state only; drawing lives in render.py.
 """
 
 STORY = [
-    ("Year 2387", "Beep-boop! Hi pilot, I'm ORBI, your flight droid. Let me catch you up."),
+    ("Year 2387", "Beep-boop! Hi pilot, I'm ORBI, your co-pilot droid. Let me catch you up."),
     ("The Aurora Gate", "Behind us is the Aurora Gate, the last hyperspace gate. Every colony ship "
                         "comes home through it."),
     ("The Vex Armada", "The Vex Armada wants it dark. Their swarms and three motherships are "
@@ -49,6 +50,7 @@ class Guide:
         self.seen = set()
         self.tip = None            # text of the tip on screen
         self.tip_timer = 0.0
+        self.queue = []            # tips waiting for the comms line
         self.t = 0.0               # animation clock
         self.enter = 0.0           # 0 -> 1 fly-in progress
 
@@ -65,12 +67,14 @@ class Guide:
         self.tips_enabled = True
         self.seen = set()
         self.tip = None
+        self.queue = []
 
     def stop(self):
         """Run over or abandoned: no more tips."""
         self.briefing = False
         self.tips_enabled = False
         self.tip = None
+        self.queue = []
 
     @property
     def text(self):
@@ -116,13 +120,19 @@ class Guide:
             self.tip_timer -= dt
             if self.tip_timer <= 0:
                 self.tip = None
+        if self.tip is None and self.queue:
+            self.tip = self.queue.pop(0)
+            self.tip_timer = TIP_TIME
 
     def show_tip(self, key, text):
         if key in self.seen:
             return
         self.seen.add(key)
-        self.tip = text
-        self.tip_timer = TIP_TIME
+        if self.tip is None:
+            self.tip = text
+            self.tip_timer = TIP_TIME
+        else:
+            self.queue.append(text)
 
     def on_events(self, events):
         if not self.tips_enabled or self.briefing:
