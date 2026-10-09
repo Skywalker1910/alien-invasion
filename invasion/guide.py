@@ -1,16 +1,16 @@
-"""Orbi, the co-pilot droid: the story briefing and first-run tips.
+"""BB-8, the co-pilot droid: the story briefing and first-run tips.
 
-On a player's first run (or when they pick Tutorial from the menu) Orbi
+On a player's first run (or when they pick Tutorial from the menu) BB-8
 rolls in at the start of level 1, tells the story and explains the
-controls. The game is frozen while the briefing is open, so Orbi can take
-the whole screen. During play Orbi never covers the action: its one-time
+controls. The game is frozen while the briefing is open, so BB-8 can take
+the whole screen. During play BB-8 never covers the action: its one-time
 tips appear one after another as a comms line in the top HUD bar.
 
 This is UI state only; drawing lives in render.py.
 """
 
 STORY = [
-    ("Year 2387", "Beep-boop! Hi pilot, I'm ORBI, your co-pilot droid. Let me catch you up."),
+    ("Year 2387", "Beep-boop! Hi pilot, I'm BB-8, your co-pilot droid. Let me catch you up."),
     ("The Aurora Gate", "Behind us is the Aurora Gate, the last hyperspace gate. Every colony ship "
                         "comes home through it."),
     ("The Vex Armada", "The Vex Armada wants it dark. Their swarms and three motherships are "

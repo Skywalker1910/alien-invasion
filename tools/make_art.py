@@ -483,8 +483,8 @@ def _mask_circle(art, cx=0.5, cy=0.5, r=0.5):
     art.surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
 
 
-def orbi():
-    """Orbi, the co-pilot droid: a white rolling ball with orange ring panels
+def bb8():
+    """BB-8, the co-pilot droid: a white rolling ball with orange ring panels
     and a domed head, matching the portfolio's co-pilot assistant. Three
     sprites: the body pattern (rotated at runtime so it rolls), a fixed
     shading overlay, and the head (kept upright on top)."""
@@ -513,7 +513,7 @@ def orbi():
     a.circle(grey, 0.5, 0.52, 3.2)
     _mask_circle(a)
     a.circle((205, 208, 218), 0.5, 0.5, 40, 1)
-    a.save("orbi_body")
+    a.save("bb8_body")
 
     # Fixed shading: a soft shadow crescent bottom-right and a highlight
     s = Art(80, 80)
@@ -521,7 +521,7 @@ def orbi():
     s.circle((0, 0, 0, 0), 0.42, 0.4, 37)
     s.ellipse((255, 255, 255, 110), 0.2, 0.12, 0.5, 0.34)
     _mask_circle(s)
-    s.save("orbi_shade")
+    s.save("bb8_shade")
 
     # Head: white dome, orange band, dark bottom rim, big lens + small lens
     h = Art(54, 34)
@@ -541,14 +541,14 @@ def orbi():
     h.circle((230, 235, 255), 0.37, 0.29, 1.4)
     h.circle((30, 32, 40), 0.64, 0.38, 2.4)
     h.ellipse((255, 255, 255, 120), 0.18, 0.08, 0.52, 0.22)
-    h.save("orbi_head")
+    h.save("bb8_head")
 
 
 def main():
     pygame.init()
     heart()
     unknown_flag()
-    orbi()
+    bb8()
     os.makedirs(OUT, exist_ok=True)
     cfg = Config()
     player(cfg)

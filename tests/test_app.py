@@ -231,3 +231,13 @@ def test_host_inventory_commands():
     bridge.commands = [{"type": "select", "slot": 0}]
     app.frame(1 / 60)
     assert game.ship.weapon == "rail"
+
+
+def test_bridge_pins_parent_origin_strictly():
+    from invasion.bridge import _JS_SHIM
+    # Default target is the game's own origin, never a wildcard.
+    assert 'params.get("parentOrigin") || window.location.origin' in _JS_SHIM
+    assert 'postMessage(Object.assign({ source: "alien-invasion" }, detail), bridge.parentOrigin)' in _JS_SHIM
+    assert '"*"' not in _JS_SHIM
+    # Commands need the direct parent AND the pinned origin.
+    assert "e.source === window.parent && e.origin === bridge.parentOrigin" in _JS_SHIM

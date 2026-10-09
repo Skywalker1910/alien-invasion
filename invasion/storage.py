@@ -20,7 +20,7 @@ from .bridge import IS_BROWSER
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(ROOT, "save", "alien_invasion.db")
 STORAGE_KEY = "alien_invasion.v1"
-NAME_MAX = 14
+NAME_MAX = 20
 KEEP = 200                       # entries kept per store
 
 _NAME_OK = re.compile(r"[^A-Za-z0-9 _\-.]")

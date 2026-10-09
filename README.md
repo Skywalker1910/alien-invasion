@@ -18,9 +18,9 @@ Every change goes in as its own commit, so the git history shows how the game gr
 
 *Year 2387.* The **Aurora Gate** is humanity's last hyperspace gate, and every colony ship comes home through it. The **Vex Armada** wants it dark: its swarms and three motherships are already crossing the Outer Rim. You fly the **Starling**, the only fighter left at the gate. Hold the line through ten sectors and take down their motherships.
 
-The first time you play, **Orbi**, your co-pilot droid, rolls in at the start of level 1. It's styled to match the co-pilot assistant on my portfolio: a white rolling ball with orange ring panels and a domed head. Orbi tells you the story and walks you through the controls. The game waits until Orbi is done, so it can use the whole screen. Press Space or Enter to go on, Left to go back, or Esc to skip.
+The first time you play, **BB-8**, your co-pilot droid, rolls in at the start of level 1. It's styled to match the co-pilot assistant on my portfolio: a white rolling ball with orange ring panels and a domed head. BB-8 tells you the story and walks you through the controls. The game waits until BB-8 is done, so it can use the whole screen. Press Space or Enter to go on, Left to go back, or Esc to skip.
 
-During play, Orbi never covers the action. Its one-time tips (first capsule, first stored weapon, first hit, first boss, and so on) show up one after another as a **co-pilot comms line in the top bar**, with a small Orbi head next to the text. You can replay the briefing any time with **Tutorial** on the main menu.
+During play, BB-8 never covers the action. Its one-time tips (first capsule, first stored weapon, first hit, first boss, and so on) show up one after another as a **co-pilot comms line in the top bar**, with a small BB-8 head next to the text. You can replay the briefing any time with **Tutorial** on the main menu.
 
 ## How to play
 
@@ -122,7 +122,7 @@ The game opens on a **main menu**: Play, Leaderboard, Tutorial, Help and Quit (Q
 
 ### Leaderboard
 
-When a run ends with a score, the game asks for a **pilot name** (a game name, up to 14 characters) and a **country**. Type to search the country list, then press Enter. Your score goes into the leaderboard, shown as **flag, name, then score** (plus the level reached). Your new entry is highlighted. The game remembers your last name and country for next time, and you can skip saving with Esc. You can also open the leaderboard from the main menu.
+When a run ends with a score, the game asks for a **pilot name** (a game name, up to 20 characters) and a **country**. Type to search the country list, then press Enter. Your score goes into the leaderboard, shown as **flag, name, then score** (plus the level reached). Your new entry is highlighted. The game remembers your last name and country for next time, and you can skip saving with Esc. You can also open the leaderboard from the main menu.
 
 Scores are kept in a small local database:
 - **Desktop:** a SQLite file at `save/alien_invasion.db` (ignored by git)
@@ -175,7 +175,7 @@ The tests check the important rules:
 - every weapon actually damages things, and ammo, refills and time limits work
 - weapons can be switched with their ammo kept, upgrades work instantly, and a full inventory replaces the emptiest slot
 - the menus, help pages, pause menu, restart and main menu all work by keyboard and mouse
-- Orbi's briefing freezes the game and shows only on your first run (or from Tutorial); its tips appear once each, queue up instead of overlapping, and stay inside the top bar
+- BB-8's briefing freezes the game and shows only on your first run (or from Tutorial); its tips appear once each, queue up instead of overlapping, and stay inside the top bar
 - the leaderboard database (SQLite and in-memory) sorts and ranks scores and keeps settings; the name and flag entry saves correctly, and every country has a bundled flag
 - upgrades refresh and expire, missed capsules disappear, and the magnet and the drop guarantee work
 - the shockwave kills a Guardian and then recharges
@@ -216,7 +216,7 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 | `invasion/render.py` | Drawing, effects, HUD and menus |
 | `invasion/controls.py` | Keyboard plus virtual (touch) input |
 | `invasion/menu.py` | Main menu, pause menu, help, pilot entry and leaderboard screens |
-| `invasion/guide.py` | Orbi's story briefing and first-run tips |
+| `invasion/guide.py` | BB-8's story briefing and first-run tips |
 | `invasion/storage.py` | Local leaderboard database (SQLite on desktop, localStorage in the browser) |
 | `invasion/countries.py` | Country list for the flag picker |
 | `invasion/codex.py` | Help text for every enemy, boss and power-up |
@@ -236,7 +236,7 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 - ✅ Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
 - ✅ Big rework: random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
 - ✅ 10-slot weapon inventory, a main menu, pause menu and in-game help
-- ✅ **Story mode:** Orbi the co-pilot droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
+- ✅ **Story mode:** BB-8 the co-pilot droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
 
 ## Ideas for what's next
 

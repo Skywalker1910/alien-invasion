@@ -49,8 +49,11 @@
 </div>
 <script>
   const frame = document.getElementById("game");
-  // Use the game's real origin instead of "*" once it is deployed.
-  const send = (cmd) => frame.contentWindow.postMessage({ target: "alien-invasion", ...cmd }, "*");
+  // The game only accepts commands from its direct parent whose origin matches
+  // the iframe's ?parentOrigin= (default: the game's own origin). Target the
+  // game's origin when posting; never "*".
+  const GAME_ORIGIN = new URL(frame.src, window.location.href).origin;
+  const send = (cmd) => frame.contentWindow.postMessage({ target: "alien-invasion", ...cmd }, GAME_ORIGIN);
 
   window.addEventListener("message", (e) => {
     if (e.source !== frame.contentWindow) return;

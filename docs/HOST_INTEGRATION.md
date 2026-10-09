@@ -11,7 +11,7 @@ host fails, the bridge turns itself off and the game keeps running.
 
 ## What the game keeps, and what the host can add
 
-The game keeps a **local leaderboard** itself. After a run, the player types a pilot name (a game name, up to 14 plain characters) and picks a country flag. The entry is stored in the browser's `localStorage` (or in SQLite on desktop), and the game sends a `score_saved` event.
+The game keeps a **local leaderboard** itself. After a run, the player types a pilot name (a game name, up to 20 plain characters) and picks a country flag. The entry is stored in the browser's `localStorage` (or in SQLite on desktop), and the game sends a `score_saved` event.
 
 A host page can add things the game deliberately doesn't do:
 
@@ -49,9 +49,12 @@ The game always draws a fixed 960 × 640 logical playfield, and the canvas
 scales to fit whatever size you give it. It stays readable down to roughly
 480 × 320.
 
-`parentOrigin` is optional. When you set it, the game only posts events to that
-origin. Without it, events are posted with target origin `"*"`. They contain
-nothing sensitive, but pinning the origin is better practice.
+`parentOrigin` pins who the game talks to. Events are posted only to that
+origin, and commands are accepted only when they come from the direct parent
+window **and** `event.origin` equals `parentOrigin`. Without the parameter it
+defaults to the game's own origin, which suits a same-origin embed. A host on a
+different origin **must** pass its exact origin, or the game ignores its
+commands. The game never posts to `"*"`.
 
 `docs/host-example.html` is a complete working host page with a score display,
 start/pause buttons and on-screen touch controls.
@@ -77,7 +80,7 @@ ways:
 | `player_destroyed` | the player lost a ship | `lives`, `cause` (`bullet`, `orb`, `bolt`, `missile`, `beam`, `ram`, `mine`) |
 | `pickup` | a capsule was collected | `kind`, `category` (`weapon` / `utility`), `label`, `bonus` |
 | `weapon_switched` | the player changed weapon | `weapon`, `slot` |
-| `briefing_started` / `briefing_finished` | Orbi's story briefing opened / was finished or skipped (the game is frozen in between) | |
+| `briefing_started` / `briefing_finished` | BB-8's story briefing opened / was finished or skipped (the game is frozen in between) | |
 | `score_saved` | the player saved a run to the local leaderboard | `name`, `country` (ISO code or empty), `score`, `level`, `run_id`, `seed`, `rank` (local) |
 | `paused` / `resumed` | pause state changed (keyboard, focus or host) | |
 | `run_abandoned` | the player left a run from the pause menu (Restart run / Main menu). Not a finished run: don't submit it. | `run_id`, `score`, `level` |
@@ -95,6 +98,7 @@ Send commands either with
 `iframe.contentWindow.postMessage({target: "alien-invasion", type, ...}, gameOrigin)`
 from the parent page (the game only accepts these from its direct parent), or
 with `window.AlienInvasionBridge.send({type, ...})` from inside the game page.
+Parent messages must come from the configured `parentOrigin` (see Embedding).
 
 | type | effect |
 | --- | --- |
@@ -105,7 +109,7 @@ with `window.AlienInvasionBridge.send({type, ...})` from inside the game page.
 | `special` | fire the shockwave if it is charged (like pressing Shift) |
 | `switch` | previous / next weapon: `direction` -1 or 1 (like Q / E) |
 | `select` | equip the weapon in inventory `slot` (0–9, like keys 1–0) |
-| `skip_briefing` | close Orbi's briefing (like Esc) |
+| `skip_briefing` | close BB-8's briefing (like Esc) |
 
 Unknown commands are ignored.
 

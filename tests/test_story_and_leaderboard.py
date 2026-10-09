@@ -1,4 +1,4 @@
-"""Tests for the leaderboard database, Orbi's briefing and the pilot entry flow."""
+"""Tests for the leaderboard database, BB-8's briefing and the pilot entry flow."""
 import os
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -54,7 +54,8 @@ def test_sqlite_scores_survive_reopening(tmp_path):
 def test_names_are_cleaned():
     assert clean_name("  Ace<script>  ") == "Acescript"
     assert clean_name("") == "Pilot"
-    assert len(clean_name("x" * 40)) == 14
+    assert len(clean_name("x" * 40)) == 20
+    assert clean_name("A" * 20) == "A" * 20
 
 
 def test_every_country_has_a_bundled_flag():
@@ -65,7 +66,7 @@ def test_every_country_has_a_bundled_flag():
 
 
 # ----------------------------------------------------------------------
-# Orbi's briefing
+# BB-8's briefing
 # ----------------------------------------------------------------------
 def test_guide_types_then_advances_and_finishes():
     guide = Guide()

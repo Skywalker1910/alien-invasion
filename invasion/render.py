@@ -108,7 +108,7 @@ class Renderer:
         self.ship_img = load_image("player")
         self.life_icon = pygame.transform.smoothscale(self.ship_img, (14, 16))
         self.heart = load_image("icon_health")
-        self.orbi_parts = {name: load_image(f"orbi_{name}") for name in ("body", "shade", "head")}
+        self.bb8_parts = {name: load_image(f"bb8_{name}") for name in ("body", "shade", "head")}
         self._flags = {}
         self.heart_big = pygame.transform.smoothscale(self.heart, (22, 20))
         self.wingman_img = load_image("wingman")
@@ -937,7 +937,7 @@ class Renderer:
 
     def _help_story(self, surf, area):
         from .guide import STORY
-        self.draw_orbi(surf, area.x + 70, area.y + 130, 1.3, self.time, roll=8 * math.sin(self.time), 
+        self.draw_bb8(surf, area.x + 70, area.y + 130, 1.3, self.time, roll=8 * math.sin(self.time), 
                        lean=0.2 * math.sin(self.time))
         y = area.y + 4
         for title, text in STORY[:4]:
@@ -947,7 +947,7 @@ class Renderer:
                 self.blit_text(surf, part, 24, TEXT, topleft=(area.x + 170, y))
                 y += 24
             y += 14
-        self.blit_text(surf, "Replay Orbi's briefing any time: Tutorial on the main menu.", 20, DIM,
+        self.blit_text(surf, "Replay BB-8's briefing any time: Tutorial on the main menu.", 20, DIM,
                        topleft=(area.x + 170, y + 6))
 
     def _help_basics(self, surf, area):
@@ -1057,25 +1057,25 @@ class Renderer:
         self._help_list(surf, area, rows, False)
 
     # ------------------------------------------------------------------
-    # Orbi the guide droid
+    # BB-8 the guide droid
     # ------------------------------------------------------------------
-    def _orbi_scaled(self, name, scale):
-        key = ("orbi", name, round(scale * 40))
+    def _bb8_scaled(self, name, scale):
+        key = ("bb8", name, round(scale * 40))
         img = self._glows.get(key)
         if img is None:
-            src = self.orbi_parts[name]
+            src = self.bb8_parts[name]
             img = pygame.transform.smoothscale(src, (round(src.get_width() * scale),
                                                      round(src.get_height() * scale)))
             self._glows[key] = img
         return img
 
-    def draw_orbi_head(self, surf, midbottom, scale, t, talking=False, lean=0.0):
-        """Orbi's domed head with its antenna, blinking eye and talk light."""
-        head = self._orbi_scaled("head", scale)
+    def draw_bb8_head(self, surf, midbottom, scale, t, talking=False, lean=0.0):
+        """BB-8's domed head with its antenna, blinking eye and talk light."""
+        head = self._bb8_scaled("head", scale)
         if lean:
             head = pygame.transform.rotate(head, -lean * 12)
         rect = head.get_rect(midbottom=(round(midbottom[0]), round(midbottom[1])))
-        hw, hh = self.orbi_parts["head"].get_size()
+        hw, hh = self.bb8_parts["head"].get_size()
         # Antenna
         base = (rect.centerx - 0.14 * hw * scale, rect.top + 0.1 * hh * scale)
         tip = (base[0] + 1.5 * scale, base[1] - 13 * scale)
@@ -1094,16 +1094,16 @@ class Renderer:
             self.add_glow(surf, rect.x + 0.64 * rect.w, rect.y + 0.38 * rect.h, (255, 120, 40), round(5 * scale) + 2)
         return rect
 
-    def draw_orbi(self, surf, x, y, scale, t, talking=False, roll=0.0, lean=0.0):
-        """Orbi at body center (x, y): the ball rolls (roll = degrees), the
+    def draw_bb8(self, surf, x, y, scale, t, talking=False, roll=0.0, lean=0.0):
+        """BB-8 at body center (x, y): the ball rolls (roll = degrees), the
         head stays upright on top and leans a little with the motion."""
-        d = self.orbi_parts["body"].get_width() * scale
+        d = self.bb8_parts["body"].get_width() * scale
         self.add_glow(surf, x, y + d * 0.46, (255, 140, 60), round(16 * scale) + 4)
-        body = pygame.transform.rotozoom(self.orbi_parts["body"], roll, scale)
+        body = pygame.transform.rotozoom(self.bb8_parts["body"], roll, scale)
         surf.blit(body, body.get_rect(center=(round(x), round(y))))
-        shade = self._orbi_scaled("shade", scale)
+        shade = self._bb8_scaled("shade", scale)
         surf.blit(shade, shade.get_rect(center=(round(x), round(y))))
-        self.draw_orbi_head(surf, (x + lean * 5 * scale, y - d * 0.44), scale, t, talking, lean)
+        self.draw_bb8_head(surf, (x + lean * 5 * scale, y - d * 0.44), scale, t, talking, lean)
 
     def _bubble_box(self, surf, rect, tail_to=None):
         if tail_to:
@@ -1117,7 +1117,7 @@ class Renderer:
         pygame.draw.rect(surf, ORANGE, rect, 2, border_radius=14)
 
     def _draw_briefing(self, surf, guide):
-        """Before play starts Orbi gets the stage: it rolls in and talks."""
+        """Before play starts BB-8 gets the stage: it rolls in and talks."""
         from .guide import STORY
         self._dim(surf, 150)
         scale = 1.9
@@ -1128,12 +1128,12 @@ class Renderer:
         oy = self.height - 200
         rock = math.sin(guide.t * 1.7)
         roll = -math.degrees((ox - start_x) / radius) + 7 * rock * ease
-        self.draw_orbi(surf, ox, oy, scale, guide.t, talking=guide.typing, roll=roll,
+        self.draw_bb8(surf, ox, oy, scale, guide.t, talking=guide.typing, roll=roll,
                        lean=0.6 * (1 - ease) + 0.2 * rock * ease)
 
         box = pygame.Rect(320, 110, 600, 300)
         self._bubble_box(surf, box, (ox + 70, oy - 110))
-        self.blit_text(surf, "ORBI  ·  CO-PILOT", 20, ORANGE, topleft=(box.x + 22, box.y + 16))
+        self.blit_text(surf, "BB-8  ·  CO-PILOT", 20, ORANGE, topleft=(box.x + 22, box.y + 16))
         self.blit_text(surf, guide.title.upper(), 36, YELLOW, topleft=(box.x + 22, box.y + 40))
         shown = guide.text[:int(guide.chars)]
         y = box.y + 90
@@ -1149,7 +1149,7 @@ class Renderer:
         self.blit_text(surf, hint, 19, DIM, midright=(box.right - 22, box.bottom - 24))
 
     def _draw_comms(self, surf, guide):
-        """During play Orbi stays off the playfield: its tips appear as a
+        """During play BB-8 stays off the playfield: its tips appear as a
         co-pilot comms line inside the top HUD bar."""
         top_h = self.cfg.display.hud_height
         shown = guide.tip_timer
@@ -1160,7 +1160,7 @@ class Renderer:
         rect.center = (self.width // 2, top_h // 2 - round((1 - slide) * top_h))
         pygame.draw.rect(surf, (22, 26, 52), rect, border_radius=8)
         pygame.draw.rect(surf, ORANGE, rect, 1, border_radius=8)
-        self.draw_orbi_head(surf, (rect.x + 22, rect.bottom - 2), 0.52, guide.t, talking=True)
+        self.draw_bb8_head(surf, (rect.x + 22, rect.bottom - 2), 0.52, guide.t, talking=True)
         text = guide.tip
         size = 20
         while self.font(size).size(text)[0] > rect.w - 60 and size > 15:
