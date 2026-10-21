@@ -1,4 +1,4 @@
-# 👾 Alien Invasion
+# Alien Invasion
 
 A fast 2D arcade space shooter I built in Python with Pygame. It runs on the desktop and in the browser.
 
@@ -6,7 +6,7 @@ A fast 2D arcade space shooter I built in Python with Pygame. It runs on the des
 
 I wrote this game back in my 2nd year of engineering, when I was just learning Python. I followed along with the Alien Invasion project from *Python Crash Course* by Eric Matthes. It was one of the first "real" programs I made: a window, a ship, aliens, and a lot of trial and error.
 
-If you want to see where I started, the original code (yes, with a file called `game_funtions.py` 😅) is still in the git history. Look at the first commits on `main`.
+If you want to see where I started, the original code (yes, with a file called `game_funtions.py`) is still in the git history. Look at the first commits on `main`.
 
 ## What I'm doing with it now
 
@@ -26,7 +26,7 @@ During play, BB-8 never covers the action. Its one-time tips (first capsule, fir
 
 Enemy squadrons swoop in from the corners, slide in from the sides, stream across the screen and dive at you. Every run is different: the waves are random, but the same seed always gives the same run.
 
-- Your ship has a **health bar** (the ❤ in the bottom-left). Bullets, beams, rams and mines chip away at it. You have **3 ships**.
+- Your ship has a **health bar** (the heart icon in the bottom-left). Bullets, beams, rams and mines chip away at it. You have **3 ships**.
 - After a hit you flash for a moment and can't be hit again right away, so one burst can't wipe you out.
 - Each level has its own sector, enemy mix and hazards (asteroid fields, minefields). Clear every wave to warp to the next sector.
 - **Levels 3, 6 and 10 are boss fights.** After level 10 it keeps going in endless mode, with a boss every 5 levels.
@@ -36,14 +36,14 @@ Enemy squadrons swoop in from the corners, slide in from the sides, stream acros
 
 | Ship | HP | What it does |
 | --- | --- | --- |
-| 🟢 Drone | 1 | Small and quick. Single shots. From level 2 they sometimes dive at you. |
-| 🟡 Wasp | 2 | Drops in, shakes for a moment, then dives straight at you. |
-| 🔵 Striker | 4 | Strafes side to side and fires twin shots at you. |
-| 🟠 Lancer | 8 | Moves above you, draws a thin red warning line, then fires a beam down it. Get out of the line! |
-| 🟣 Guardian | 16 | Heavy armor. Fires a spread of energy orbs. |
-| 🔴 Dreadnought | 38 | A battleship. Fires homing missiles (you can shoot them down) plus side guns. |
-| 📦 Supply Pod | 6 | Doesn't shoot. Crosses the screen once per level. Shoot it for **two** capsules. |
-| 🪨 Asteroid / 💣 Mine | – | Hazards. Mines blink before they blow up, and shooting one sets it off safely. |
+| Drone | 1 | Small and quick. Single shots. From level 2 they sometimes dive at you. |
+| Wasp | 2 | Drops in, shakes for a moment, then dives straight at you. |
+| Striker | 4 | Strafes side to side and fires twin shots at you. |
+| Lancer | 8 | Moves above you, draws a thin red warning line, then fires a beam down it. Get out of the line! |
+| Guardian | 16 | Heavy armor. Fires a spread of energy orbs. |
+| Dreadnought | 38 | A battleship. Fires homing missiles (you can shoot them down) plus side guns. |
+| Supply Pod | 6 | Doesn't shoot. Crosses the screen once per level. Shoot it for **two** capsules. |
+| Asteroid / Mine | – | Hazards. Mines blink before they blow up, and shooting one sets it off safely. |
 
 Enemy health goes up a little every level.
 
@@ -91,9 +91,9 @@ Wrecks sometimes drop capsules that fall toward the bottom of the screen. Fly in
 | Wingmen | Two little drones fly with you and shoot for 15 s |
 | Overdrive | Double damage and faster fire for 8 s |
 | Magnet | Pulls nearby capsules to you for 14 s |
+| Extra Ship | One more ship (rare, up to 5) |
 
 Every upgrade kicks in **the moment you grab it**. Grabbing a timed one (Wingmen, Overdrive, Magnet) that's already running resets its timer to full.
-| Extra Ship | One more ship (rare, up to 5) |
 
 ### Inventory
 
@@ -136,7 +136,7 @@ Scores are kept in a small local database:
 
 The public leaderboard lives entirely on the portfolio's server (name review and storage). The game only sends your chosen name, country and run id to the page that embeds it.
 
-The 252 country flags are bundled with the game (`assets/flags/`, fetched once with `tools/fetch_flags.py` from flagcdn.com; national flags are public domain). Nothing is downloaded while you play. If the game is embedded on a website, it also tells the page about each saved score, so the site can keep a global leaderboard if it wants one.
+The 252 country flags are bundled with the game (`assets/flags/`, fetched once with `tools/fetch_flags.py` from flagcdn.com; national flags are public domain). Nothing is downloaded while you play.
 
 ## How to run it
 
@@ -160,7 +160,7 @@ python build_web.py --serve   # open http://localhost:8000
 python build_web.py           # just build into build/web/
 ```
 
-My portfolio page embeds this build. The game reports things like run started, score, health, level, game over and saved leaderboard entries to the page. The page can pause the game or send touch controls. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
+My portfolio page embeds this build. The game reports things like run started, score, health, level and game over to the page, and asks it to publish a score when you choose **Save & publish**. The page can pause the game or send touch controls. The details are in [docs/HOST_INTEGRATION.md](docs/HOST_INTEGRATION.md).
 
 ### Portfolio deployment
 
@@ -180,6 +180,8 @@ python tools/make_art.py
 pip install -r requirements-dev.txt
 python -m pytest
 ```
+
+`main` is protected: changes go in through pull requests, and the **test** check (the same suite, run by GitHub Actions) has to pass before merging.
 
 The tests check the important rules:
 - armor soaks damage before health, and shields block an exact number of hits
@@ -231,25 +233,30 @@ Every number lives in `invasion/config.py`, with units in the comments. Enemy st
 | `invasion/menu.py` | Main menu, pause menu, help, pilot entry and leaderboard screens |
 | `invasion/guide.py` | BB-8's story briefing and first-run tips |
 | `invasion/storage.py` | Local leaderboard database (SQLite on desktop, localStorage in the browser) |
+| `invasion/publish.py` | Public score publishing through the portfolio page (Save & publish) |
 | `invasion/countries.py` | Country list for the flag picker |
 | `invasion/codex.py` | Help text for every enemy, boss and power-up |
 | `invasion/app.py` | The window and the main loop |
 | `invasion/bridge.py` | Talks to the web page in the browser build (does nothing on desktop) |
+| `invasion/autopilot.py` | A simple bot used by smoke tests (`--autoplay`) |
 | `assets/images/` | Sprites (generated by `tools/make_art.py`) |
 | `assets/flags/` | Country flags + `countries.json` (fetched by `tools/fetch_flags.py`) |
 | `tools/make_art.py` | Draws all the sprites |
+| `tools/fetch_flags.py` | Downloads the bundled country flags (run once) |
 | `build_web.py` | Builds the browser version |
 | `tests/` | Automated tests |
 | `docs/` | Browser host integration guide and an example host page |
+| `.github/workflows/` | Runs the tests on pull requests and redeploys the portfolio after changes land on `main` |
 
 ## Changes so far
 
-- ✅ The original game from my college days
-- ✅ Aliens shoot back (front row only, with a limit on bullets so it stays fair)
-- ✅ Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
-- ✅ Big rework: random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
-- ✅ 10-slot weapon inventory, a main menu, pause menu and in-game help
-- ✅ **Story mode:** BB-8 the co-pilot droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
+- The original game from my college days
+- Aliens shoot back (front row only, with a limit on bullets so it stays fair)
+- Arcade upgrade: enemy types, formations, power-ups, pause/restart, frame-rate independent timing, tests, browser build
+- Big rework: random squadrons instead of the marching fleet, a hull bar with armor and shields, 6 enemy ships plus hazards and supply pods, 3 multi-stage bosses with targetable weapons, 8 weapons and 8 upgrades that can be missed, a shockwave, combos, 10 themed levels plus endless mode, and all-new artwork
+- 10-slot weapon inventory, a main menu, pause menu and in-game help
+- **Story mode:** BB-8 the co-pilot droid, a local leaderboard with pilot names and country flags, instant upgrades, and a heart-icon health bar
+- **Public scores:** an in-game Save & publish option on my portfolio, with the name review and storage handled by the portfolio's server, plus automatic portfolio redeploys when the game changes
 
 ## Ideas for what's next
 

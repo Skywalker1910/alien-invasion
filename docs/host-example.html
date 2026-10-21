@@ -62,6 +62,10 @@
     switch (ev.type) {
       case "ready":
         document.getElementById("start").disabled = false;
+        // This example has no public leaderboard, so the game offers only
+        // "Save locally". A host with one sends publicLeaderboard: true, its
+        // nameMax and the disclosure text shown before publishing.
+        send({ type: "host_config", publicLeaderboard: false, nameMax: 20 });
         break;
       case "state":
         document.getElementById("score").textContent = ev.score;
@@ -70,10 +74,16 @@
         document.getElementById("lives").textContent = ev.lives;
         break;
       case "score_saved":
-        // The player saved a run to the game's local leaderboard (name +
-        // country flag). Submit it to your own global leaderboard here if
-        // you have one; the game never makes network calls itself.
-        console.log("score saved", ev);
+        // "Save locally": device-only (publish: false). Never public consent.
+        console.log("saved on this device", ev);
+        break;
+      case "score_submit":
+        // "Save & publish" (only offered after host_config publicLeaderboard:
+        // true). A real host reviews the name and stores the score on its
+        // server, then answers with score_publication for this run_id:
+        // status "saving", then "saved" (with the reviewed name) or "error".
+        send({ type: "score_publication", run_id: ev.run_id, status: "error",
+               message: "This example page has no public leaderboard.", retryable: false });
         break;
     }
   });
