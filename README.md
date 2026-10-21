@@ -1,4 +1,4 @@
-# Alien Invasion
+# 👾 Alien Invasion
 
 A fast 2D arcade space shooter I built in Python with Pygame. It runs on the desktop and in the browser.
 
@@ -36,14 +36,14 @@ Enemy squadrons swoop in from the corners, slide in from the sides, stream acros
 
 | Ship | HP | What it does |
 | --- | --- | --- |
-| Drone | 1 | Small and quick. Single shots. From level 2 they sometimes dive at you. |
-| Wasp | 2 | Drops in, shakes for a moment, then dives straight at you. |
-| Striker | 4 | Strafes side to side and fires twin shots at you. |
-| Lancer | 8 | Moves above you, draws a thin red warning line, then fires a beam down it. Get out of the line! |
-| Guardian | 16 | Heavy armor. Fires a spread of energy orbs. |
-| Dreadnought | 38 | A battleship. Fires homing missiles (you can shoot them down) plus side guns. |
-| Supply Pod | 6 | Doesn't shoot. Crosses the screen once per level. Shoot it for **two** capsules. |
-| Asteroid / Mine | – | Hazards. Mines blink before they blow up, and shooting one sets it off safely. |
+| 🟢 Drone | 1 | Small and quick. Single shots. From level 2 they sometimes dive at you. |
+| 🟡 Wasp | 2 | Drops in, shakes for a moment, then dives straight at you. |
+| 🔵 Striker | 4 | Strafes side to side and fires twin shots at you. |
+| 🟠 Lancer | 8 | Moves above you, draws a thin red warning line, then fires a beam down it. Get out of the line! |
+| 🟣 Guardian | 16 | Heavy armor. Fires a spread of energy orbs. |
+| 🔴 Dreadnought | 38 | A battleship. Fires homing missiles (you can shoot them down) plus side guns. |
+| 📦 Supply Pod | 6 | Doesn't shoot. Crosses the screen once per level. Shoot it for **two** capsules. |
+| 🪨 Asteroid / 💣 Mine | – | Hazards. Mines blink before they blow up, and shooting one sets it off safely. |
 
 Enemy health goes up a little every level.
 
